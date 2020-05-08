@@ -10,6 +10,8 @@ from label_smooth import LabelSmoothSoftmaxCE
 import os
 from dataloader import get_loader
 from PIL import ImageFile
+from resnet import resnet50
+from tqdm import tqdm
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 #==========================================
 torch.manual_seed(123)            # 为CPU设置随机种子
@@ -24,7 +26,7 @@ class p:
         
         self.num_classes = 2
 
-        self.batch_size = 20
+        self.batch_size = 40
 
         self.EPOCH = 100
 
@@ -38,7 +40,12 @@ class p:
 
 param = p()
 #=============================================
-# net = torchvision.models.resnet34(pretrained=True)
+# net = resnet50(pretrained=False)
+# mydict = torch.load('/root/.cache/torch/checkpoints/resnet50-19c8e357.pth')
+# print('loading...')
+# for each in tqdm(mydict.keys()):
+  # resnet50().state_dict()[each] = mydict[each]
+# print('successful!')
 net = EfficientNet.from_pretrained('efficientnet-b4')
 
 net._fc.out_features = param.num_classes
@@ -118,19 +125,15 @@ def train():
                 total += labels.size(0)
                 correct += (predicted == labels).cpu().sum()
             acc = 100. * float(correct) / float(total)
-            val_accs.append(acc)
+            
             print('测试分类准确率为：%.3f%%' % acc)
-            if acc > val_accs.max():
+            if acc > max(val_accs):
                 print("高准确率，保存模型！")
                 torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (param.outdir, epoch + 1,acc))
+            val_accs.append(acc)
             scheduler.step(acc)
 
     torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (param.outdir, epoch + 1,acc))
-
-
-
-
-
 
 if __name__ == "__main__":
     train()
