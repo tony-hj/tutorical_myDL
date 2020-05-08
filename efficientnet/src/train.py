@@ -12,7 +12,10 @@ from dataloader import get_loader
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 #==========================================
+torch.manual_seed(123)            # 为CPU设置随机种子
+torch.cuda.manual_seed(123)       # 为当前GPU设置随机种子
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+
 
 class p:
     def __init__(self):

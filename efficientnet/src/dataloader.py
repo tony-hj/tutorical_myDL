@@ -35,7 +35,7 @@ def get_loader(batch_size,input_size, num_workers):
         pin_memory=True,
         drop_last=True,
     )
-    test_loader = torch.utils.data.DataLoader(
+    val_loader = torch.utils.data.DataLoader(
         image_datasets['val'],
         batch_size=batch_size,
         num_workers=num_workers,
@@ -43,6 +43,14 @@ def get_loader(batch_size,input_size, num_workers):
         pin_memory=True,
         drop_last=False,
     )
-    dataloaders_dict = {'train':train_loader,'val':test_loader}
+    # test_loader = torch.utils.data.DataLoader(
+        # image_datasets['test'],
+        # batch_size=batch_size,
+        # num_workers=num_workers,
+        # shuffle=False,
+        # pin_memory=True,
+        # drop_last=False,
+    # )
+    dataloaders_dict = {'train':train_loader,'val':val_loader}
     
     return dataloaders_dict , image_datasets['train'].class_to_idx
