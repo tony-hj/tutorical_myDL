@@ -53,12 +53,11 @@ net = net.to(device)
 params_to_update = net.parameters()
 dataloaders_dict , b = get_loader(param.batch_size,param.input_size, num_workers=0)
 
-def main():
+def train():
     ii = 0
     LR = 1e-3  
     val_accs = []
     train_losses = []
-    bad_data = []
     best_acc = 0  
     
     # 损失函数 优化器 scheduler
@@ -126,5 +125,9 @@ def main():
     torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (param.outdir, epoch + 1,acc))
 
 
+
+
+
+
 if __name__ == "__main__":
-    main()
+    train()
