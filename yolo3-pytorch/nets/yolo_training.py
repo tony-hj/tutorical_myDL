@@ -243,6 +243,7 @@ class YOLOLoss(nn.Module):
                     tconf[b, best_n, gj, gi] = 1
                     # 种类
                     tcls[b, best_n, gj, gi, int(target[b][t, 4])] = 1
+
                 else:
                     print('Step {0} out of bound'.format(b))
                     print('gj: {0}, height: {1} | gi: {2}, width: {3}'.format(gj, in_h, gi, in_w))
@@ -337,6 +338,7 @@ class Generator(object):
         place_x = [0,0,int(w*min_offset_x),int(w*min_offset_x)]
         place_y = [0,int(h*min_offset_y),int(w*min_offset_y),0]
         for line in annotation_line:
+            line = line.strip('\n')
             # 每一行进行分割
             line_content = line.split(" ")
             # 打开图片
@@ -352,7 +354,8 @@ class Generator(object):
             flip = rand()<.5
             if flip: 
                 image = image.transpose(Image.FLIP_LEFT_RIGHT)
-                box[:, [0,2]] = iw - box[:, [2,0]]
+                if len(box) > 0:
+                    box[:, [0,2]] = iw - box[:, [2,0]]
     
             # 对输入进来的图片进行缩放
             new_ar = w/h
@@ -403,17 +406,20 @@ class Generator(object):
                 box = box[np.logical_and(box_w>1, box_h>1)]
                 box_data = np.zeros((len(box),5))
                 box_data[:len(box)] = box
-            
+                
+                box_datas.append(box_data)
+                
             image_datas.append(image_data)
-            box_datas.append(box_data)
+            
     
             img = Image.fromarray((image_data*255).astype(np.uint8))
-            for j in range(len(box_data)):
-                thickness = 3
-                left, top, right, bottom  = box_data[j][0:4]
-                draw = ImageDraw.Draw(img)
-                for i in range(thickness):
-                    draw.rectangle([left + i, top + i, right - i, bottom - i],outline=(255,255,255))
+            if len(box) > 0:
+                for j in range(len(box_data)):
+                    thickness = 3
+                    left, top, right, bottom  = box_data[j][0:4]
+                    draw = ImageDraw.Draw(img)
+                    for i in range(thickness):
+                        draw.rectangle([left + i, top + i, right - i, bottom - i],outline=(255,255,255))
             # img.show()
     
         
@@ -513,8 +519,9 @@ class Generator(object):
             targets = []
             for start in range(0,len(lines),4):  
                 annotation_line = lines[start:start+4]
+                # print(annotation_line)
                 img,y=self.get_random_data2(annotation_line,self.image_size[0:2]) # 替换试试？
-                print(y)
+                y = np.array(y)
                 if len(y)==0:
                     continue
                 boxes = np.array(y[:,:4],dtype=np.float32)
@@ -539,4 +546,6 @@ class Generator(object):
                     tmp_targets = np.array(targets)
                     inputs = []
                     targets = []
+                    # print(tmp_inp.shape,tmp_targets.shape)
+                    # print(tmp_targets)
                     yield tmp_inp, tmp_targets
