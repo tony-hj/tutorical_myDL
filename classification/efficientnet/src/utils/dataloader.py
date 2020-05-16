@@ -7,7 +7,7 @@ from torch.utils.data.dataset import Dataset
 from prefetch_generator import BackgroundGenerator
 from PIL import Image
 from data_pps import get_lists # 可能会有问题
-from config import *
+import config
 
     
 # 传入 ['file_path',class] 返回img,class,path(用于看脏数据)

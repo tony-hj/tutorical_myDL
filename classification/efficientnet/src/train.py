@@ -12,6 +12,7 @@ from utils.dataloader import get_debug_loader
 from PIL import ImageFile
 from tqdm import tqdm
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+import utils.config as config 
 #==========================================
 torch.manual_seed(123)            # 为CPU设置随机种子
 torch.cuda.manual_seed(123)       # 为当前GPU设置随机种子
