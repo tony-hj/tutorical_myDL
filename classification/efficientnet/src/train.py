@@ -18,8 +18,10 @@ torch.manual_seed(123)            # 为CPU设置随机种子
 torch.cuda.manual_seed(123)       # 为当前GPU设置随机种子
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-
-net = EfficientNet.from_pretrained('efficientnet-b4')
+if config.model_path:
+    net = EfficientNet.from_pretrained('efficientnet-b4',weights_path=config.model_path)
+else:
+    net = EfficientNet.from_pretrained('efficientnet-b4')
 
 net._fc.out_features = config.num_classes
 
@@ -29,8 +31,6 @@ if torch.cuda.device_count() > 1:
     print("Let's use", torch.cuda.device_count(), "GPUs!")
     net = nn.DataParallel(net)
 
-if config.model_path:
-    net.load_state_dict(torch.load(config.model_path))
 
 if not os.path.exists(config.outdir):
     os.mkdir(config.outdir)
