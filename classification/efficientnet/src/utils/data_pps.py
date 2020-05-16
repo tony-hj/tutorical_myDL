@@ -3,7 +3,7 @@ import numpy as np
 from shutil import copyfile
 from random import shuffle
 from glob import glob
-from config import root
+from utils.config import root
 
 def get_lists(root=root,type=1,merge=False,img_dir=''):# mydict指定***.txt的地址
     '''
@@ -23,15 +23,17 @@ def get_lists(root=root,type=1,merge=False,img_dir=''):# mydict指定***.txt的�
     |dataset-|-name.jpg,name.txt(华为云专用)
     
     type-4                  img_dir is needed !!!
-    |dataset-|-img_all
-             |-classes-|-***.txt
+    |dataset-|-img_all-|-classes
+             |- root  -|-classes-|-***.txt
     '''
     test_paths = []
     train_paths = []
     val_paths = []
     all_path = []
-    
-    classes = os.listdir(os.path.join(root,'train'))
+    try:
+      classes = os.listdir(os.path.join(root,'train'))
+    except:
+      classes = os.listdir(root)
     cls2id = {name:i for i,name in enumerate(classes)}
     
     labels = {}
@@ -49,12 +51,14 @@ def get_lists(root=root,type=1,merge=False,img_dir=''):# mydict指定***.txt的�
 
         pre = img_dir
         for cls in os.listdir(root):
-            for txt in glob(os.path.join(pre,cls)+'/*.txt'):       
+            for txt in glob(os.path.join(root,cls)+'/*.txt'):       
                 for name in type2names[merge]:
                     if name in txt:
                         with open(txt) as f:
-                            paths[name] = [[os.path.join(pre,line.strip('\n')),cls2id[cls]] for line in f.readlines()]
+                            paths[name] += [[os.path.join(pre,cls,line.strip('\n')),cls2id[cls]] for line in f.readlines()]
+
                             
+    # paths一开始包含label，下面的操作分离之
     if merge:
         paths['train']+=paths['val']
     
@@ -63,7 +67,7 @@ def get_lists(root=root,type=1,merge=False,img_dir=''):# mydict指定***.txt的�
         
     for name in type2names[merge]:
         paths[name] = [i[0]for i in paths[name]]
-    
+
     return paths,labels,cls2id
 
 

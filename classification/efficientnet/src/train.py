@@ -6,7 +6,7 @@ from torch import nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 from efficientnet_pytorch import EfficientNet
-from label_smooth import LabelSmoothSoftmaxCE
+from utils.label_smooth import LabelSmoothSoftmaxCE
 import os
 from utils.dataloader import get_debug_loader
 from PIL import ImageFile
@@ -21,7 +21,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 net = EfficientNet.from_pretrained('efficientnet-b4')
 
-net._fc.out_features = num_classes
+net._fc.out_features = config.num_classes
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -29,26 +29,29 @@ if torch.cuda.device_count() > 1:
     print("Let's use", torch.cuda.device_count(), "GPUs!")
     net = nn.DataParallel(net)
 
-if model_path:
+if config.model_path:
     net.load_state_dict(torch.load(config.model_path))
+
+if not os.path.exists(config.outdir):
+    os.mkdir(config.outdir)
 
 net = net.to(device)
 params_to_update = net.parameters()
-dataloaders_dict, cls2id = get_debug_loader(type=1,merge=True)
+dataloaders_dict, cls2id = get_debug_loader(type=4,merge=True,img_dir='/content/src/Images-processed')
 
 criterion = LabelSmoothSoftmaxCE() if config.label_smooth else nn.CrossEntropyLoss().to(device)
-optimizer = optim.Adam(params_to_update, lr=LR, betas=(0.9, 0.999), eps=1e-9)
+optimizer = optim.Adam(params_to_update, lr=config.LR, betas=(0.9, 0.999), eps=1e-9)
 scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True)
 # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=Config.milestone, gamma=0.1)
 
-def train(LR = config.LR,criterion,optimizer,scheduler,debug=False):
+def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
 
-    val_accs = []
+    val_accs = [0]
     train_losses = []
     best_acc = 0  
     bad_data = []
     
-    for epoch in range(pre_epochs, config.epochs):
+    for epoch in range(config.epochs):
 
         print('\nEpoch: %d' % (epoch + 1))
         net.train()
@@ -59,7 +62,7 @@ def train(LR = config.LR,criterion,optimizer,scheduler,debug=False):
         for batch_idx, data in enumerate(dataloaders_dict['train'], 0):
 
             batchs = len(dataloaders_dict['train']) # 每个epoch有多少个batch
-            input, target = data
+            input, target, _ = data
             input,target = input.to(device),target.to(device)
 
             # 训练
@@ -91,9 +94,9 @@ def train(LR = config.LR,criterion,optimizer,scheduler,debug=False):
                 net.eval()
                 
                 if debug:
-                    images, labels,paths = data
+                    images, labels, paths = data
                 else:
-                    images, labels = data
+                    images, labels, _ = data
                 images, labels = images.to(device), labels.to(device)
                 
                 outputs = net(images)
@@ -106,14 +109,16 @@ def train(LR = config.LR,criterion,optimizer,scheduler,debug=False):
             
             bad_data.append(bad_data_one_epoch)    
             acc = 100. * float(correct) / float(total)     
-            val_accs.append(acc)
+            
             scheduler.step(acc)
             
             print('测试分类准确率为：%.3f%%' % acc)
-            
+
             if acc > max(val_accs):
                 print("高准确率，保存模型！")
                 torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
+
+            val_accs.append(acc)
             
 
 

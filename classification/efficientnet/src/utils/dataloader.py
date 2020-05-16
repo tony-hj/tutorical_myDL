@@ -6,8 +6,8 @@ from torchvision import datasets, models, transforms
 from torch.utils.data.dataset import Dataset
 from prefetch_generator import BackgroundGenerator
 from PIL import Image
-from data_pps import get_lists # 可能会有问题
-import config
+from utils.data_pps import get_lists # 可能会有问题
+import utils.config as config
 
     
 # 传入 ['file_path',class] 返回img,class,path(用于看脏数据)
@@ -106,7 +106,7 @@ def get_debug_loader(type=1,merge=False,img_dir=''):    #  得到的dataloader �
                                         shuffle=False, 
                                         pin_memory=True)
     
-    dataloaders_dict = {'trian':train_loader,'val':val_loader}
+    dataloaders_dict = {'train':train_loader,'val':val_loader}
     
     return dataloaders_dict,cls2id
     
