@@ -60,14 +60,14 @@ if __name__ == "__main__":
     # 参数初始化
     annotation_path = '2007_train.txt'
     EPOCH_LENGTH = 2000
-    NUM_CLASSES = 20
+    NUM_CLASSES = 44
     IMAGE_SHAPE = [600,600,3]
     BACKBONE = "resnet50"
     model = FasterRCNN(NUM_CLASSES,backbone=BACKBONE).cuda()
 
     print('Loading weights into state dict...')
     model_dict = model.state_dict()
-    pretrained_dict = torch.load("model_data/voc_weights_resnet.pth")
+    pretrained_dict = torch.load("/content/drive/My Drive/voc_weights_resnet.pth")
     pretrained_dict = {k: v for k, v in pretrained_dict.items() if np.shape(model_dict[k]) ==  np.shape(v)}
     model_dict.update(pretrained_dict)
     model.load_state_dict(model_dict)
