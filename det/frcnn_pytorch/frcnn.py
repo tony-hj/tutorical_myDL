@@ -13,14 +13,14 @@ from PIL import Image, ImageFont, ImageDraw
 import copy
 import math
 
+
 class FRCNN(object):
     _defaults = {
-        "model_path": 'model_data/voc_weights_resnet.pth',
+        "model_path": '/content/frcnn_pytorch/logs/Epoch1-Total_Loss1.1945-Val_Loss1.1351.pth',
         "classes_path": 'model_data/voc_classes.txt',
         "confidence": 0.5,
         "backbone": "resnet50"
     }
-
     @classmethod
     def get_defaults(cls, n):
         if n in cls._defaults:
