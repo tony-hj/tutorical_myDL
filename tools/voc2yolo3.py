@@ -2,6 +2,8 @@ import os
 import random 
 random.seed(0)
 
+# 本文件将annotations中的所有文件的文件名先去掉后缀，然后进行划分
+
 xmlfilepath=r'./VOCdevkit/VOC2007/Annotations'
 saveBasePath=r"./VOCdevkit/VOC2007/ImageSets/Main/"
  
