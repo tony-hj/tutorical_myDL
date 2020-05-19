@@ -95,6 +95,8 @@ def convert(xml_list, xml_dir, json_file):
 if __name__ == '__main__':
     if len(sys.argv) <= 1:
         print('3 auguments are need.')
+        # 下面就是使用说明
+        # xml_list的要求是要xml的文件名，以.xml结尾
         print('Usage: %s XML_LIST.txt XML_DIR OUTPU_JSON.json'%(sys.argv[0]))
         exit(1)
 
