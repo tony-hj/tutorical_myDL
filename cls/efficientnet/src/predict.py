@@ -8,9 +8,13 @@ from PIL import Image
 import numpy as np
 import time
 import pandas as pd
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument("--seed",type=int,default=123,help='path = os.listdir(root)[seed]')
+args = parser.parse_args()
+
 
 test_data = pd.read_csv('/content/dataset/annotation.csv')
-seed = 233
 
 
 net = EfficientNet.from_pretrained('efficientnet-b4', num_classes=num_classes)
@@ -19,8 +23,8 @@ net.eval()
 
 
 start = time.time()
-filename = test_data.iloc[seed,0] + '.jpg'
-gt_label = test_data.iloc[seed,1]
+filename = test_data.iloc[args.seed,0] + '.jpg'
+gt_label = test_data.iloc[args.seed,1]
 image = Image.open(os.path.join(root,filename)).convert('RGB')
 print('filename',filename)
 input = test_transform(image).unsqueeze(0)
