@@ -73,6 +73,18 @@ def bboxes_iou(bboxes_a, bboxes_b, xyxy=True):
     return area_i / (area_a[:, None] + area_b - area_i)
 
 
+def bboxes_giou(bboxes_a, bboxes_b, xyxy=True):
+    pass
+
+
+def bboxes_diou(bboxes_a, bboxes_b, xyxy=True):
+    pass
+
+
+def bboxes_ciou(bboxes_a, bboxes_b, xyxy=True):
+    pass
+
+
 class Yolo_loss(nn.Module):
     def __init__(self, n_classes=80, n_anchors=3, device=None, batch=2):
         super(Yolo_loss, self).__init__()
@@ -82,11 +94,13 @@ class Yolo_loss(nn.Module):
         self.n_classes = n_classes
         self.n_anchors = n_anchors
 
-        self.anchors = [[10, 13], [16, 30], [33, 23], [30, 61], [62, 45], [59, 119], [116, 90], [156, 198], [373, 326]]
+        self.anchors = [[12, 16], [19, 36], [40, 28], [36, 75], [76, 55], [72, 146], [142, 110], [192, 243], [459, 401]]
         self.anch_masks = [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
         self.ignore_thre = 0.5
 
         self.masked_anchors, self.ref_anchors, self.grid_x, self.grid_y, self.anchor_w, self.anchor_h = [], [], [], [], [], []
+        
+        
         for i in range(3):
             all_anchors_grid = [(w / self.strides[i], h / self.strides[i]) for w, h in self.anchors]
             masked_anchors = np.array([all_anchors_grid[j] for j in self.anch_masks[i]], dtype=np.float32)
@@ -116,7 +130,7 @@ class Yolo_loss(nn.Module):
         tgt_scale = torch.zeros(batchsize, self.n_anchors, fsize, fsize, 2).to(self.device)
         target = torch.zeros(batchsize, self.n_anchors, fsize, fsize, n_ch).to(self.device)
 
-        #labels = labels.cpu().data
+        # labels = labels.cpu().data
         nlabel = (labels.sum(dim=2) > 0).sum(dim=1)  # number of objects
 
         truth_x_all = (labels[:, :, 2] + labels[:, :, 0]) / (self.strides[output_id] * 2)
@@ -224,7 +238,7 @@ def collate(batch):
         bboxes.append([box])
     images = np.concatenate(images, axis=0)
     images = images.transpose(0, 3, 1, 2)
-    images = torch.from_numpy(images)
+    images = torch.from_numpy(images).div(255.0)
     bboxes = np.concatenate(bboxes, axis=0)
     bboxes = torch.from_numpy(bboxes)
     return images, bboxes
@@ -256,18 +270,32 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
         Epochs:          {epochs}
         Batch size:      {config.batch}
         Subdivisions:    {config.subdivisions}
-        Learning rate:   {config.lr}
+        Learning rate:   {config.learning_rate}
         Training size:   {n_train}
         Validation size: {n_val}
         Checkpoints:     {save_cp}
         Device:          {device.type}
         Images size:     {config.width}
         Optimizer:       {config.TRAIN_OPTIMIZER}
+        Pretrained:
     ''')
 
-    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate, betas=(0.9, 0.999), eps=1e-08)
+    # learning rate setup
+    def burnin_schedule(i):
+        if i < config.burn_in:
+            factor = pow(i / config.burn_in, 4)
+        elif i < config.steps[0]:
+            factor = 1.0
+        elif i < config.steps[1]:
+            factor = 0.1
+        else:
+            factor = 0.01
+        return factor
 
-    criterion = Yolo_loss(device=device,batch=config.batch//config.subdivisions)
+    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate / config.batch, betas=(0.9, 0.999), eps=1e-08)
+    scheduler = optim.lr_scheduler.LambdaLR(optimizer, burnin_schedule)
+
+    criterion = Yolo_loss(device=device, batch=config.batch // config.subdivisions)
     # scheduler = ReduceLROnPlateau(optimizer, mode='max', verbose=True, patience=6, min_lr=1e-7)
     # scheduler = CosineAnnealingWarmRestarts(optimizer, 0.001, 1e-6, 20)
 
@@ -288,33 +316,37 @@ def train(model, device, config, epochs=5, batch_size=1, save_cp=True, log_step=
 
                 bboxes_pred = model(images)
                 loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2 = criterion(bboxes_pred, bboxes)
-                loss = loss / config.subdivisions
+                # loss = loss / config.subdivisions
                 loss.backward()
 
                 epoch_loss += loss.item()
 
                 if i % config.subdivisions == 0:
                     optimizer.step()
+                    scheduler.step()
                     model.zero_grad()
 
-                if epoch_step % log_step == 0:
-                    writer.add_scalar('Loss/train', loss.item(), global_step)
-                    writer.add_scalar('loss_xy/train', loss_xy.item(), global_step)
-                    writer.add_scalar('loss_wh/train', loss_wh.item(), global_step)
-                    writer.add_scalar('loss_obj/train', loss_obj.item(), global_step)
-                    writer.add_scalar('loss_cls/train', loss_cls.item(), global_step)
-                    writer.add_scalar('loss_l2/train', loss_l2.item(), global_step)
+                if epoch_step % (log_step * config.subdivisions) == 0:
+                    writer.add_scalar('train/Loss', loss.item(), global_step)
+                    writer.add_scalar('train/loss_xy', loss_xy.item(), global_step)
+                    writer.add_scalar('train/loss_wh', loss_wh.item(), global_step)
+                    writer.add_scalar('train/loss_obj', loss_obj.item(), global_step)
+                    writer.add_scalar('train/loss_cls', loss_cls.item(), global_step)
+                    writer.add_scalar('train/loss_l2', loss_l2.item(), global_step)
+                    writer.add_scalar('lr', scheduler.get_lr()[0] * config.batch, global_step)
                     pbar.set_postfix(**{'loss (batch)': loss.item(), 'loss_xy': loss_xy.item(),
                                         'loss_wh': loss_wh.item(),
                                         'loss_obj': loss_obj.item(),
                                         'loss_cls': loss_cls.item(),
-                                        'loss_l2': loss_l2.item()
+                                        'loss_l2': loss_l2.item(),
+                                        'lr': scheduler.get_lr()[0] * config.batch
                                         })
                     logging.debug('Train step_{}: loss : {},loss xy : {},loss wh : {},'
-                                  'loss obj : {}，loss cls : {},loss l2 : {}'
+                                  'loss obj : {}，loss cls : {},loss l2 : {},lr : {}'
                                   .format(global_step, loss.item(), loss_xy.item(),
                                           loss_wh.item(), loss_obj.item(),
-                                          loss_cls.item(), loss_l2.item()))
+                                          loss_cls.item(), loss_l2.item(),
+                                          scheduler.get_lr()[0] * config.batch))
 
                 pbar.update(images.shape[0])
 
@@ -336,12 +368,15 @@ def get_args(**kwargs):
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # parser.add_argument('-b', '--batch-size', metavar='B', type=int, nargs='?', default=2,
     #                     help='Batch size', dest='batchsize')
-    parser.add_argument('-l', '--learning-rate', metavar='LR', type=float, nargs='?', default=0.1,
-                        help='Learning rate', dest='lr')
+    parser.add_argument('-l', '--learning-rate', metavar='LR', type=float, nargs='?', default=0.001,
+                        help='Learning rate', dest='learning_rate')
     parser.add_argument('-f', '--load', dest='load', type=str, default=None,
                         help='Load model from a .pth file')
     parser.add_argument('-g', '--gpu', metavar='G', type=str, default='-1',
                         help='GPU', dest='gpu')
+    parser.add_argument('-dir', '--data-dir', type=str, default=None,
+                        help='dataset dir', dest='dataset_dir')
+    parser.add_argument('-pretrained',type=str,default=None,help='pretrained yolov4.conv.137')
     args = vars(parser.parse_args())
 
     for k in args.keys():
@@ -392,11 +427,10 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logging.info(f'Using device {device}')
 
-    model = Yolov4()
+    model = Yolov4(cfg.pretrained)
 
     if torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model)
-    # model = model.cuda()
     model.to(device=device)
 
     try:

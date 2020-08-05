@@ -18,7 +18,6 @@ import sys
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 
 
 def rand_uniform_strong(min, max):
@@ -142,7 +141,7 @@ def image_data_augmentation(mat, w, h, pleft, ptop, swidth, sheight, flip, dhue,
                 hsv[2] *= dexp
                 hsv[0] += 179 * dhue
                 hsv_src = cv2.merge(hsv)
-                sized = cv2.cvtColor(hsv_src, cv2.COLOR_HSV2RGB)  # HSV to RGB (the same as previous)
+                sized = np.clip(cv2.cvtColor(hsv_src, cv2.COLOR_HSV2RGB), 0, 255)  # HSV to RGB (the same as previous)
             else:
                 sized *= dexp
 
@@ -212,21 +211,22 @@ def filter_truth(bboxes, dx, dy, sx, sy, xd, yd):
 
 def blend_truth_mosaic(out_img, img, bboxes, w, h, cut_x, cut_y, i_mixup,
                        left_shift, right_shift, top_shift, bot_shift):
+    left_shift = min(left_shift, w - cut_x)
+    top_shift = min(top_shift, h - cut_y)
+    right_shift = min(right_shift, cut_x)
+    bot_shift = min(bot_shift, cut_y)
+
     if i_mixup == 0:
         bboxes = filter_truth(bboxes, left_shift, top_shift, cut_x, cut_y, 0, 0)
-
         out_img[:cut_y, :cut_x] = img[top_shift:top_shift + cut_y, left_shift:left_shift + cut_x]
     if i_mixup == 1:
         bboxes = filter_truth(bboxes, cut_x - right_shift, top_shift, w - cut_x, cut_y, cut_x, 0)
-
         out_img[:cut_y, cut_x:] = img[top_shift:top_shift + cut_y, cut_x - right_shift:w - right_shift]
     if i_mixup == 2:
         bboxes = filter_truth(bboxes, left_shift, cut_y - bot_shift, cut_x, h - cut_y, 0, cut_y)
-
         out_img[cut_y:, :cut_x] = img[cut_y - bot_shift:h - bot_shift, left_shift:left_shift + cut_x]
     if i_mixup == 3:
-        bboxes = filter_truth(bboxes, cut_x - right_shift, cut_y - bot_shift, cut_x, h - cut_y, cut_x, cut_y)
-
+        bboxes = filter_truth(bboxes, cut_x - right_shift, cut_y - bot_shift, w - cut_x, h - cut_y, cut_x, cut_y)
         out_img[cut_y:, cut_x:] = img[cut_y - bot_shift:h - bot_shift, cut_x - right_shift:w - right_shift]
 
     return out_img, bboxes
@@ -265,13 +265,9 @@ class Yolo_dataset(Dataset):
 
     def __getitem__(self, index):
         img_path = list(self.truth.keys())[index].strip('\n')
+
         bboxes = np.array(self.truth.get(img_path), dtype=np.float)
-        # try:
-        #   if np.isnan(bboxes):
-        #     print('ERROR!',img_path)
-        # except:
-        #   print('ok')
-        
+
         use_mixup = self.cfg.mixup
         if random.randint(0, 1):
             use_mixup = 0
@@ -290,14 +286,11 @@ class Yolo_dataset(Dataset):
 
         for i in range(use_mixup + 1):
             if i != 0:
-                img_path = random.choice(list(self.truth.keys())).strip('\n')
+                img_path = random.choice(list(self.truth.keys()))
                 bboxes = np.array(self.truth.get(img_path), dtype=np.float)
-                # try:
-                #   if np.isnan(bboxes):
-                #     print('ERROR!',img_path)
-                # except:
-                #   print('ok')
-            img = np.array(Image.open(img_path))
+
+            img = np.array(Image.open(img_path).convert('RGB'))
+            
             if img is None:
                 continue
             oh, ow, oc = img.shape
@@ -348,7 +341,7 @@ class Yolo_dataset(Dataset):
 
             swidth = ow - pleft - pright
             sheight = oh - ptop - pbot
-            # print(bboxes)
+
             truth, min_w_h = fill_truth_detection(bboxes, self.cfg.boxes, self.cfg.classes, flip, pleft, ptop, swidth,
                                                   sheight, self.cfg.w, self.cfg.h)
             if (min_w_h / 8) < blur and blur > 1:  # disable blur if one of the objects is too small
@@ -360,7 +353,6 @@ class Yolo_dataset(Dataset):
             if use_mixup == 0:
                 out_img = ai
                 out_bboxes = truth
-                # print('use_mixup == 0:')
             if use_mixup == 1:
                 if i == 0:
                     old_img = ai.copy()
@@ -387,16 +379,19 @@ class Yolo_dataset(Dataset):
         if use_mixup == 3:
             out_bboxes = np.concatenate(out_bboxes, axis=0)
         out_bboxes1 = np.zeros([self.cfg.boxes, 5])
-        out_bboxes1[:min(out_bboxes.shape[0],self.cfg.boxes)] = out_bboxes[:min(out_bboxes.shape[0],self.cfg.boxes)]
+        out_bboxes1[:min(out_bboxes.shape[0], self.cfg.boxes)] = out_bboxes[:min(out_bboxes.shape[0], self.cfg.boxes)]
         return out_img, out_bboxes1
 
 
 if __name__ == "__main__":
     from cfg import Cfg
 
+    random.seed(2020)
+    np.random.seed(2020)
+    Cfg.dataset_dir = '/mnt/e/Dataset'
     dataset = Yolo_dataset(Cfg.train_label, Cfg)
-    for i in tqdm(range(1000)):
-        out_img, out_bboxes = dataset.__getitem__(random.randint(0, 100))
+    for i in range(100):
+        out_img, out_bboxes = dataset.__getitem__(i)
         a = draw_box(out_img.copy(), out_bboxes.astype(np.int32))
-        # plt.imshow(a.astype(np.int32))
-        # plt.show()
+        plt.imshow(a.astype(np.int32))
+        plt.show()

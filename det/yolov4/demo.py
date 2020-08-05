@@ -26,13 +26,13 @@ def detect(cfgfile, weightfile, imgfile):
     m.load_weights(weightfile)
     print('Loading weights from %s... Done!' % (weightfile))
 
-    num_classes = 80
+    num_classes = 44
     if num_classes == 20:
         namesfile = 'data/voc.names'
     elif num_classes == 80:
         namesfile = 'data/coco.names'
     else:
-        namesfile = 'data/names'
+        namesfile = 'data/voc.names'
 
     use_cuda = 0
     if use_cuda:

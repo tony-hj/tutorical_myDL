@@ -27,8 +27,8 @@ Cfg.hue = .1
 
 Cfg.learning_rate = 0.00261
 Cfg.burn_in = 1000
-Cfg.max_batches = 50000
-Cfg.steps = 40000, 45000
+Cfg.max_batches = 500500
+Cfg.steps = [400000, 450000]
 Cfg.policy = Cfg.steps
 Cfg.scales = .1, .1
 
@@ -37,7 +37,7 @@ Cfg.mosaic = 1
 
 Cfg.letter_box = 0
 Cfg.jitter = 0.2
-Cfg.classes = 80
+Cfg.classes = 44
 Cfg.track = 0
 Cfg.w = Cfg.width
 Cfg.h = Cfg.height
@@ -45,7 +45,7 @@ Cfg.flip = 1
 Cfg.blur = 0
 Cfg.gaussian = 0
 Cfg.boxes = 60  # box num
-Cfg.TRAIN_EPOCHS = 50
+Cfg.TRAIN_EPOCHS = 300
 Cfg.train_label = 'data/2007_train.txt'
 Cfg.val_label = 'data/2007_val.txt'
 Cfg.TRAIN_OPTIMIZER = 'adam'

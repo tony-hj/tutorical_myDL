@@ -4,73 +4,45 @@ from shutil import copyfile
 from random import shuffle
 from glob import glob
 from utils.config import root
+import pandas as pd
+
+'''
+file 文件名
+paths 完整路径
+label 数字
+cls 单词
+id 数字
+'''
 
 def get_lists(root=root,type=1,merge=False,img_dir=''):# mydict指定***.txt的地址
+    
     '''
-    type-0  理想型
-    |dataset-|-train-|-classes-|-files
-             |-val-|-classes-|-files
-             
-    type-1  需要merge
-    |dataset-|-train-|-classes-|-files
-             |-val-|-classes-|-files
-             |-test-|-classes-|-files
-             
-    type-2  直接列表
-    |dataset-|-classes-|-files
-
-    type-3  
-    |dataset-|-name.jpg,name.txt(华为云专用)
-    
-    type-4                  img_dir is needed !!!
-    |dataset-|-img_all-|-classes
-             |- root  -|-classes-|-***.txt
+    returns
+    1. path 一个字典，分为'train'、'val'，他们分别包含着由绝对路径组成的列表
+    2. label ... 由数字标签组成
+    3. cls2id {cls_1:0, cls_2:1}
     '''
-    test_paths = []
-    train_paths = []
-    val_paths = []
-    all_path = []
-    try:
-      classes = os.listdir(os.path.join(root,'train'))
-    except:
-      classes = os.listdir(root)
-    cls2id = {name:i for i,name in enumerate(classes)}
-    
-    labels = {}
-    paths = {'test':test_paths,'train':train_paths,'val':val_paths,'all':all_path}
-    type2names = {0:['train','val'],1:['test','train','val'],2:['all']}
-    
-    if type in [1,0,2]:
-        
-        for name in type2names[merge]:
-            pre = os.path.join(root,name,cls) #前缀
-            paths[name] += [[path,cls2id[name]] for path in os.listdir(pre)]
+    species = pd.read_csv(os.path.join(root,'species.csv'))
+    cls2id = {list(species.ScientificName)[i]:list(species.ID)[i] for i in range(species.shape[0])}
 
+    data = pd.read_csv(os.path.join(root,'training.csv'))
+    data = data.sample(frac=1)
+    paths2train = [root+'/data/'+i+'.jpg' for i in list(data['FileID'])]
+    labels2train = list(data['SpeciesID'])
 
-    elif type == 4:
+    anno = pd.read_csv(os.path.join(root,'annotation.csv')) # test.csv文件名和真实标签，用于验证
+    paths4val = [root+'/data/'+i+'.jpg' for i in list(anno['FileID'])]
+    labels4tval = list(anno['SpeciesID'])
 
-        pre = img_dir
-        for cls in os.listdir(root):
-            for txt in glob(os.path.join(root,cls)+'/*.txt'):       
-                for name in type2names[merge]:
-                    if name in txt:
-                        with open(txt) as f:
-                            paths[name] += [[os.path.join(pre,cls,line.strip('\n')),cls2id[cls]] for line in f.readlines()]
+    path = {}
+    path['train'] = paths2train
+    path['val'] = paths4val
 
-                            
-    # paths一开始包含label，下面的操作分离之
-    if merge:
-        paths['train']+=paths['val']
-    
-    for name in type2names[merge]:
-        labels[name] = [i[1]for i in paths[name]]
-        
-    for name in type2names[merge]:
-        paths[name] = [i[0]for i in paths[name]]
+    label = {}
+    label['train'] = labels2train
+    label['val'] = labels4tval
 
-    return paths,labels,cls2id
-
-
+    return path,label,cls2id
 
 
 

@@ -19,11 +19,11 @@ torch.cuda.manual_seed(123)       # 为当前GPU设置随机种子
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 if config.model_path:
-    net = EfficientNet.from_pretrained('efficientnet-b4',weights_path=config.model_path)
+    net = EfficientNet.from_pretrained('efficientnet-b4',weights_path=config.model_path,num_classes=config.num_classes)
 else:
-    net = EfficientNet.from_pretrained('efficientnet-b4')
+    net = EfficientNet.from_pretrained('efficientnet-b4',num_classes=config.num_classes)
 
-net._fc.out_features = config.num_classes
+#net._fc.out_features = config.num_classes
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
