@@ -1,300 +1,198 @@
-# Author: Zylo117
-
+from __future__ import division
 import os
-
-import cv2
-import numpy as np
-import torch
-from glob import glob
-from torch import nn
-from torchvision.ops import nms
-from torchvision.ops.boxes import batched_nms
-from typing import Union
-import uuid
-
-from utils.sync_batchnorm import SynchronizedBatchNorm2d
-
-from torch.nn.init import _calculate_fan_in_and_fan_out, _no_grad_normal_
 import math
-import webcolors
+import time
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+import matplotlib.pyplot as plt
 
-def invert_affine(metas: Union[float, list, tuple], preds):
-    for i in range(len(preds)):
-        if len(preds[i]['rois']) == 0:
-            continue
-        else:
-            if metas is float:
-                preds[i]['rois'][:, [0, 2]] = preds[i]['rois'][:, [0, 2]] / metas
-                preds[i]['rois'][:, [1, 3]] = preds[i]['rois'][:, [1, 3]] / metas
-            else:
-                new_w, new_h, old_w, old_h, padding_w, padding_h = metas[i]
-                preds[i]['rois'][:, [0, 2]] = preds[i]['rois'][:, [0, 2]] / (new_w / old_w)
-                preds[i]['rois'][:, [1, 3]] = preds[i]['rois'][:, [1, 3]] / (new_h / old_h)
-    return preds
+def decodebox(regression, anchors, img):
+    dtype = regression.dtype
+    anchors = anchors.to(dtype)
+    y_centers_a = (anchors[..., 0] + anchors[..., 2]) / 2
+    x_centers_a = (anchors[..., 1] + anchors[..., 3]) / 2
 
+    ha = anchors[..., 2] - anchors[..., 0]
+    wa = anchors[..., 3] - anchors[..., 1]
 
-def aspectaware_resize_padding(image, width, height, interpolation=None, means=None):
-    old_h, old_w, c = image.shape
-    if old_w > old_h:
-        new_w = width
-        new_h = int(width / old_w * old_h)
+    w = regression[..., 3].exp() * wa
+    h = regression[..., 2].exp() * ha
+
+    y_centers = regression[..., 0] * ha + y_centers_a
+    x_centers = regression[..., 1] * wa + x_centers_a
+
+    ymin = y_centers - h / 2.
+    xmin = x_centers - w / 2.
+    ymax = y_centers + h / 2.
+    xmax = x_centers + w / 2.
+
+    boxes = torch.stack([xmin, ymin, xmax, ymax], dim=2)
+
+    _, _, height, width = np.shape(img)
+
+    boxes[:, :, 0] = torch.clamp(boxes[:, :, 0], min=0)
+    boxes[:, :, 1] = torch.clamp(boxes[:, :, 1], min=0)
+
+    boxes[:, :, 2] = torch.clamp(boxes[:, :, 2], max=width - 1)
+    boxes[:, :, 3] = torch.clamp(boxes[:, :, 3], max=height - 1)
+    
+    # fig = plt.figure()
+    # ax = fig.add_subplot(121)
+    # grid_x = x_centers_a[0,-4*4*9:]
+    # grid_y = y_centers_a[0,-4*4*9:]
+    # plt.ylim(-600,1200)
+    # plt.xlim(-600,1200)
+    # plt.gca().invert_yaxis()
+    # plt.scatter(grid_x.cpu(),grid_y.cpu())
+
+    # anchor_left = anchors[0,-4*4*9:,1]
+    # anchor_top = anchors[0,-4*4*9:,0]
+    # anchor_w = wa[0,-4*4*9:]
+    # anchor_h = ha[0,-4*4*9:]
+
+    # for i in range(9,18):
+    #     rect1 = plt.Rectangle([anchor_left[i],anchor_top[i]],anchor_w[i],anchor_h[i],color="r",fill=False)
+    #     ax.add_patch(rect1)
+
+    # ax = fig.add_subplot(122)
+    
+    # grid_x = x_centers_a[0,-4*4*9:]
+    # grid_y = y_centers_a[0,-4*4*9:]
+    # plt.scatter(grid_x.cpu(),grid_y.cpu())
+    # plt.ylim(-600,1200)
+    # plt.xlim(-600,1200)
+    # plt.gca().invert_yaxis()
+    
+    # y_centers = y_centers[0,-4*4*9:]
+    # x_centers = x_centers[0,-4*4*9:]
+
+    # pre_left = xmin[0,-4*4*9:]
+    # pre_top = ymin[0,-4*4*9:]
+    
+    # pre_w = xmax[0,-4*4*9:]-xmin[0,-4*4*9:]
+    # pre_h = ymax[0,-4*4*9:]-ymin[0,-4*4*9:]
+
+    # for i in range(9,18):
+    #     plt.scatter(x_centers[i].cpu(),y_centers[i].cpu(),c='r')
+    #     rect1 = plt.Rectangle([pre_left[i],pre_top[i]],pre_w[i],pre_h[i],color="r",fill=False)
+    #     ax.add_patch(rect1)
+
+    # plt.show()
+    return boxes
+    
+def letterbox_image(image, size):
+    iw, ih = image.size
+    w, h = size
+    scale = min(w/iw, h/ih)
+    nw = int(iw*scale)
+    nh = int(ih*scale)
+
+    image = image.resize((nw,nh), Image.BICUBIC)
+    new_image = Image.new('RGB', size, (128,128,128))
+    new_image.paste(image, ((w-nw)//2, (h-nh)//2))
+    return new_image
+
+def efficientdet_correct_boxes(top, left, bottom, right, input_shape, image_shape):
+    new_shape = image_shape*np.min(input_shape/image_shape)
+
+    offset = (input_shape-new_shape)/2./input_shape
+    scale = input_shape/new_shape
+
+    box_yx = np.concatenate(((top+bottom)/2,(left+right)/2),axis=-1)/input_shape
+    box_hw = np.concatenate((bottom-top,right-left),axis=-1)/input_shape
+
+    box_yx = (box_yx - offset) * scale
+    box_hw *= scale
+
+    box_mins = box_yx - (box_hw / 2.)
+    box_maxes = box_yx + (box_hw / 2.)
+    boxes =  np.concatenate([
+        box_mins[:, 0:1],
+        box_mins[:, 1:2],
+        box_maxes[:, 0:1],
+        box_maxes[:, 1:2]
+    ],axis=-1)
+    print(np.shape(boxes))
+    boxes *= np.concatenate([image_shape, image_shape],axis=-1)
+    return boxes
+
+def bbox_iou(box1, box2, x1y1x2y2=True):
+    """
+        计算IOU
+    """
+    if not x1y1x2y2:
+        b1_x1, b1_x2 = box1[:, 0] - box1[:, 2] / 2, box1[:, 0] + box1[:, 2] / 2
+        b1_y1, b1_y2 = box1[:, 1] - box1[:, 3] / 2, box1[:, 1] + box1[:, 3] / 2
+        b2_x1, b2_x2 = box2[:, 0] - box2[:, 2] / 2, box2[:, 0] + box2[:, 2] / 2
+        b2_y1, b2_y2 = box2[:, 1] - box2[:, 3] / 2, box2[:, 1] + box2[:, 3] / 2
     else:
-        new_w = int(height / old_h * old_w)
-        new_h = height
+        b1_x1, b1_y1, b1_x2, b1_y2 = box1[:, 0], box1[:, 1], box1[:, 2], box1[:, 3]
+        b2_x1, b2_y1, b2_x2, b2_y2 = box2[:, 0], box2[:, 1], box2[:, 2], box2[:, 3]
 
-    canvas = np.zeros((height, height, c), np.float32)
-    if means is not None:
-        canvas[...] = means
+    inter_rect_x1 = torch.max(b1_x1, b2_x1)
+    inter_rect_y1 = torch.max(b1_y1, b2_y1)
+    inter_rect_x2 = torch.min(b1_x2, b2_x2)
+    inter_rect_y2 = torch.min(b1_y2, b2_y2)
 
-    if new_w != old_w or new_h != old_h:
-        if interpolation is None:
-            image = cv2.resize(image, (new_w, new_h))
-        else:
-            image = cv2.resize(image, (new_w, new_h), interpolation=interpolation)
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1 + 1, min=0) * \
+                 torch.clamp(inter_rect_y2 - inter_rect_y1 + 1, min=0)
+                 
+    b1_area = (b1_x2 - b1_x1 + 1) * (b1_y2 - b1_y1 + 1)
+    b2_area = (b2_x2 - b2_x1 + 1) * (b2_y2 - b2_y1 + 1)
 
-    padding_h = height - new_h
-    padding_w = width - new_w
+    iou = inter_area / (b1_area + b2_area - inter_area + 1e-16)
 
-    if c > 1:
-        canvas[:new_h, :new_w] = image
-    else:
-        if len(image.shape) == 2:
-            canvas[:new_h, :new_w, 0] = image
-        else:
-            canvas[:new_h, :new_w] = image
-
-    return canvas, new_w, new_h, old_w, old_h, padding_w, padding_h,
+    return iou
 
 
-def preprocess(*image_path, max_size=512, mean=(0.406, 0.456, 0.485), std=(0.225, 0.224, 0.229)):
-    ori_imgs = [cv2.imread(img_path) for img_path in image_path]
-    normalized_imgs = [(img / 255 - mean) / std for img in ori_imgs]
-    imgs_meta = [aspectaware_resize_padding(img[..., ::-1], max_size, max_size,
-                                            means=None) for img in normalized_imgs]
-    framed_imgs = [img_meta[0] for img_meta in imgs_meta]
-    framed_metas = [img_meta[1:] for img_meta in imgs_meta]
+def non_max_suppression(prediction, num_classes, conf_thres=0.5, nms_thres=0.4):
 
-    return ori_imgs, framed_imgs, framed_metas
+    output = [None for _ in range(len(prediction))]
+    for image_i, image_pred in enumerate(prediction):
 
+        # 获得种类及其置信度
+        class_conf, class_pred = torch.max(image_pred[:, 4:], 1, keepdim=True)
 
-def preprocess_video(*frame_from_video, max_size=512, mean=(0.406, 0.456, 0.485), std=(0.225, 0.224, 0.229)):
-    ori_imgs = frame_from_video
-    normalized_imgs = [(img / 255 - mean) / std for img in ori_imgs]
-    imgs_meta = [aspectaware_resize_padding(img[..., ::-1], max_size, max_size,
-                                            means=None) for img in normalized_imgs]
-    framed_imgs = [img_meta[0] for img_meta in imgs_meta]
-    framed_metas = [img_meta[1:] for img_meta in imgs_meta]
+        # 利用置信度进行第一轮筛选
+        conf_mask = (class_conf >= conf_thres).squeeze()
+        image_pred = image_pred[conf_mask]
+        class_conf, class_pred = class_conf[conf_mask], class_pred[conf_mask]
 
-    return ori_imgs, framed_imgs, framed_metas
-
-
-def postprocess(x, anchors, regression, classification, regressBoxes, clipBoxes, threshold, iou_threshold):
-    transformed_anchors = regressBoxes(anchors, regression)
-    transformed_anchors = clipBoxes(transformed_anchors, x)
-    scores = torch.max(classification, dim=2, keepdim=True)[0]
-    scores_over_thresh = (scores > threshold)[:, :, 0]
-    out = []
-    for i in range(x.shape[0]):
-        if scores_over_thresh[i].sum() == 0:
-            out.append({
-                'rois': np.array(()),
-                'class_ids': np.array(()),
-                'scores': np.array(()),
-            })
+        if not image_pred.size(0):
             continue
 
-        classification_per = classification[i, scores_over_thresh[i, :], ...].permute(1, 0)
-        transformed_anchors_per = transformed_anchors[i, scores_over_thresh[i, :], ...]
-        scores_per = scores[i, scores_over_thresh[i, :], ...]
-        scores_, classes_ = classification_per.max(dim=0)
-        anchors_nms_idx = batched_nms(transformed_anchors_per, scores_per[:, 0], classes_, iou_threshold=iou_threshold)
+        # 获得的内容为(x1, y1, x2, y2, class_conf, class_pred)
+        detections = torch.cat((image_pred[:, :4], class_conf.float(), class_pred.float()), 1)
 
-        if anchors_nms_idx.shape[0] != 0:
-            classes_ = classes_[anchors_nms_idx]
-            scores_ = scores_[anchors_nms_idx]
-            boxes_ = transformed_anchors_per[anchors_nms_idx, :]
+        # 获得种类
+        unique_labels = detections[:, -1].cpu().unique()
 
-            out.append({
-                'rois': boxes_.cpu().numpy(),
-                'class_ids': classes_.cpu().numpy(),
-                'scores': scores_.cpu().numpy(),
-            })
-        else:
-            out.append({
-                'rois': np.array(()),
-                'class_ids': np.array(()),
-                'scores': np.array(()),
-            })
+        if prediction.is_cuda:
+            unique_labels = unique_labels.cuda()
 
-    return out
+        for c in unique_labels:
+            # 获得某一类初步筛选后全部的预测结果
+            detections_class = detections[detections[:, -1] == c]
+            # 按照存在物体的置信度排序
+            _, conf_sort_index = torch.sort(detections_class[:, 4], descending=True)
+            detections_class = detections_class[conf_sort_index]
+            # 进行非极大抑制
+            max_detections = []
+            while detections_class.size(0):
+                # 取出这一类置信度最高的，一步一步往下判断，判断重合程度是否大于nms_thres，如果是则去除掉
+                max_detections.append(detections_class[0].unsqueeze(0))
+                if len(detections_class) == 1:
+                    break
+                ious = bbox_iou(max_detections[-1], detections_class[1:])
+                detections_class = detections_class[1:][ious < nms_thres]
+            # 堆叠
+            max_detections = torch.cat(max_detections).data
+            # Add max detections to outputs
+            output[image_i] = max_detections if output[image_i] is None else torch.cat(
+                (output[image_i], max_detections))
 
-
-def display(preds, imgs, obj_list, imshow=True, imwrite=False):
-    for i in range(len(imgs)):
-        if len(preds[i]['rois']) == 0:
-            continue
-
-        for j in range(len(preds[i]['rois'])):
-            (x1, y1, x2, y2) = preds[i]['rois'][j].astype(np.int)
-            cv2.rectangle(imgs[i], (x1, y1), (x2, y2), (255, 255, 0), 2)
-            obj = obj_list[preds[i]['class_ids'][j]]
-            score = float(preds[i]['scores'][j])
-
-            cv2.putText(imgs[i], '{}, {:.3f}'.format(obj, score),
-                        (x1, y1 + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                        (255, 255, 0), 1)
-        if imshow:
-            cv2.imshow('img', imgs[i])
-            cv2.waitKey(0)
-
-        if imwrite:
-            os.makedirs('test/', exist_ok=True)
-            cv2.imwrite(f'test/{uuid.uuid4().hex}.jpg', imgs[i])
-
-
-def replace_w_sync_bn(m):
-    for var_name in dir(m):
-        target_attr = getattr(m, var_name)
-        if type(target_attr) == torch.nn.BatchNorm2d:
-            num_features = target_attr.num_features
-            eps = target_attr.eps
-            momentum = target_attr.momentum
-            affine = target_attr.affine
-
-            # get parameters
-            running_mean = target_attr.running_mean
-            running_var = target_attr.running_var
-            if affine:
-                weight = target_attr.weight
-                bias = target_attr.bias
-
-            setattr(m, var_name,
-                    SynchronizedBatchNorm2d(num_features, eps, momentum, affine))
-
-            target_attr = getattr(m, var_name)
-            # set parameters
-            target_attr.running_mean = running_mean
-            target_attr.running_var = running_var
-            if affine:
-                target_attr.weight = weight
-                target_attr.bias = bias
-
-    for var_name, children in m.named_children():
-        replace_w_sync_bn(children)
-
-
-class CustomDataParallel(nn.DataParallel):
-    """
-    force splitting data to all gpus instead of sending all data to cuda:0 and then moving around.
-    """
-
-    def __init__(self, module, num_gpus):
-        super().__init__(module)
-        self.num_gpus = num_gpus
-
-    def scatter(self, inputs, kwargs, device_ids):
-        # More like scatter and data prep at the same time. The point is we prep the data in such a way
-        # that no scatter is necessary, and there's no need to shuffle stuff around different GPUs.
-        devices = ['cuda:' + str(x) for x in range(self.num_gpus)]
-        splits = inputs[0].shape[0] // self.num_gpus
-
-        if splits == 0:
-            raise Exception('Batchsize must be greater than num_gpus.')
-
-        return [(inputs[0][splits * device_idx: splits * (device_idx + 1)].to(f'cuda:{device_idx}', non_blocking=True),
-                 inputs[1][splits * device_idx: splits * (device_idx + 1)].to(f'cuda:{device_idx}', non_blocking=True))
-                for device_idx in range(len(devices))], \
-               [kwargs] * len(devices)
-
-
-def get_last_weights(weights_path):
-    weights_path = glob(weights_path + f'/*.pth')
-    weights_path = sorted(weights_path,
-                          key=lambda x: int(x.rsplit('_')[-1].rsplit('.')[0]),
-                          reverse=True)[0]
-    print(f'using weights {weights_path}')
-    return weights_path
-
-
-def init_weights(model):
-    for name, module in model.named_modules():
-        is_conv_layer = isinstance(module, nn.Conv2d)
-
-        if is_conv_layer:
-            if "conv_list" or "header" in name:
-                variance_scaling_(module.weight.data)
-            else:
-                nn.init.kaiming_uniform_(module.weight.data)
-
-            if module.bias is not None:
-                if "classifier.header" in name:
-                    bias_value = -np.log((1 - 0.01) / 0.01)
-                    torch.nn.init.constant_(module.bias, bias_value)
-                else:
-                    module.bias.data.zero_()
-
-
-def variance_scaling_(tensor, gain=1.):
-    # type: (Tensor, float) -> Tensor
-    r"""
-    initializer for SeparableConv in Regressor/Classifier
-    reference: https://keras.io/zh/initializers/  VarianceScaling
-    """
-    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
-    std = math.sqrt(gain / float(fan_in))
-
-    return _no_grad_normal_(tensor, 0., std)
-
-STANDARD_COLORS = [
-    'LawnGreen', 'Chartreuse', 'Aqua','Beige', 'Azure','BlanchedAlmond','Bisque',
-    'Aquamarine', 'BlueViolet', 'BurlyWood', 'CadetBlue', 'AntiqueWhite',
-    'Chocolate', 'Coral', 'CornflowerBlue', 'Cornsilk', 'Crimson', 'Cyan',
-    'DarkCyan', 'DarkGoldenRod', 'DarkGrey', 'DarkKhaki', 'DarkOrange',
-    'DarkOrchid', 'DarkSalmon', 'DarkSeaGreen', 'DarkTurquoise', 'DarkViolet',
-    'DeepPink', 'DeepSkyBlue', 'DodgerBlue', 'FireBrick', 'FloralWhite',
-    'ForestGreen', 'Fuchsia', 'Gainsboro', 'GhostWhite', 'Gold', 'GoldenRod',
-    'Salmon', 'Tan', 'HoneyDew', 'HotPink', 'IndianRed', 'Ivory', 'Khaki',
-    'Lavender', 'LavenderBlush', 'AliceBlue', 'LemonChiffon', 'LightBlue',
-    'LightCoral', 'LightCyan', 'LightGoldenRodYellow', 'LightGray', 'LightGrey',
-    'LightGreen', 'LightPink', 'LightSalmon', 'LightSeaGreen', 'LightSkyBlue',
-    'LightSlateGray', 'LightSlateGrey', 'LightSteelBlue', 'LightYellow', 'Lime',
-    'LimeGreen', 'Linen', 'Magenta', 'MediumAquaMarine', 'MediumOrchid',
-    'MediumPurple', 'MediumSeaGreen', 'MediumSlateBlue', 'MediumSpringGreen',
-    'MediumTurquoise', 'MediumVioletRed', 'MintCream', 'MistyRose', 'Moccasin',
-    'NavajoWhite', 'OldLace', 'Olive', 'OliveDrab', 'Orange', 'OrangeRed',
-    'Orchid', 'PaleGoldenRod', 'PaleGreen', 'PaleTurquoise', 'PaleVioletRed',
-    'PapayaWhip', 'PeachPuff', 'Peru', 'Pink', 'Plum', 'PowderBlue', 'Purple',
-    'Red', 'RosyBrown', 'RoyalBlue', 'SaddleBrown', 'Green', 'SandyBrown',
-    'SeaGreen', 'SeaShell', 'Sienna', 'Silver', 'SkyBlue', 'SlateBlue',
-    'SlateGray', 'SlateGrey', 'Snow', 'SpringGreen', 'SteelBlue', 'GreenYellow',
-    'Teal', 'Thistle', 'Tomato', 'Turquoise', 'Violet', 'Wheat', 'White',
-    'WhiteSmoke', 'Yellow', 'YellowGreen'
-]
-
-def from_colorname_to_bgr(color):
-    rgb_color=webcolors.name_to_rgb(color)
-    result=(rgb_color.blue,rgb_color.green,rgb_color.red)
-    return result
-
-def standard_to_bgr(list_color_name):
-    standard= []
-    for i in range(len(list_color_name)-36): #-36 used to match the len(obj_list)
-        standard.append(from_colorname_to_bgr(list_color_name[i]))
-    return standard
-
-def get_index_label(label, obj_list):
-    index = int(obj_list.index(label))
-    return index
-
-def plot_one_box(img, coord, label=None, score=None, color=None, line_thickness=None):
-    tl = line_thickness or int(round(0.001 * max(img.shape[0:2])))  # line thickness
-    color = color
-    c1, c2 = (int(coord[0]), int(coord[1])), (int(coord[2]), int(coord[3]))
-    cv2.rectangle(img, c1, c2, color, thickness=tl)
-    if label:
-        tf = max(tl - 2, 1)  # font thickness
-        s_size = cv2.getTextSize(str('{:.0%}'.format(score)),0, fontScale=float(tl) / 3, thickness=tf)[0]
-        t_size = cv2.getTextSize(label, 0, fontScale=float(tl) / 3, thickness=tf)[0]
-        c2 = c1[0] + t_size[0]+s_size[0]+15, c1[1] - t_size[1] -3
-        cv2.rectangle(img, c1, c2 , color, -1)  # filled
-        cv2.putText(img, '{}: {:.0%}'.format(label, score), (c1[0],c1[1] - 2), 0, float(tl) / 3, [0, 0, 0], thickness=tf, lineType=cv2.FONT_HERSHEY_SIMPLEX)
+    return output
