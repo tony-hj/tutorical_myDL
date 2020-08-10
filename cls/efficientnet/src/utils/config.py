@@ -92,7 +92,7 @@ LR = 1e-3
 
 # 下面的参数一般要改
 
-num_classes = 2
+num_classes = 20
 root = './' # 传给data_pps的参数
 epochs = 20
 model_path = '' # 预训练模型的位置

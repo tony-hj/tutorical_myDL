@@ -12,7 +12,8 @@ from utils.dataloader import get_debug_loader
 from PIL import ImageFile
 from tqdm import tqdm
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-import utils.config as config 
+import utils.config as config
+from tqdm import tqdm 
 #==========================================
 torch.manual_seed(123)            # 为CPU设置随机种子
 torch.cuda.manual_seed(123)       # 为当前GPU设置随机种子
@@ -50,7 +51,7 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
     train_losses = []
     best_acc = 0  
     bad_data = []
-    
+
     for epoch in range(config.epochs):
 
         print('\nEpoch: %d' % (epoch + 1))
@@ -58,67 +59,70 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
         epoch_loss = 0.0
         correct = 0.0
         total = 0.0
+        
+        batchs = len(dataloaders_dict['train'])
+        with tqdm(total=batchs) as pbar:
+            pbar.set_description(f"Train Epoch{epoch + 1}/{config.epochs}")
 
-        for batch_idx, data in enumerate(dataloaders_dict['train'], 0):
+            for batch_idx, data in enumerate(dataloaders_dict['train'], 0):
 
-            batchs = len(dataloaders_dict['train']) # 每个epoch有多少个batch
-            input, target, _ = data
-            input,target = input.to(device),target.to(device)
+                input, target, _ = data
+                input,target = input.to(device),target.to(device)
 
-            # 训练
-            optimizer.zero_grad()
-            output = net(input)
-            batch_loss = criterion(output, target)
+                # 训练
+                optimizer.zero_grad()
+                output = net(input)
+                batch_loss = criterion(output, target)
 
-            batch_loss.backward()
-            optimizer.step()
+                batch_loss.backward()
+                optimizer.step()
 
-            # 每训练1个batch打印一次loss和准确率
-            _, predicted = torch.max(output.data, 1)
-            epoch_loss += batch_loss.item()
-            total += target.size(0)
-            correct += predicted.eq(target.data).cpu().sum()
-            train_losses.append(epoch_loss / (batch_idx + 1))
-            
-            print('[epoch:%d, iter:%d] Epoch_Avg_Loss: %.03f | Acc: %.3f%% '
-                  % (epoch + 1, (batch_idx + 1 + epoch * batchs), epoch_loss / (batch_idx + 1),
-                     100. * float(correct) / float(total)))
-            
+                # 每训练1个batch打印一次loss和准确率
+                _, predicted = torch.max(output.data, 1)
+                epoch_loss += batch_loss.item()
+                total += target.size(0)
+                correct += predicted.eq(target.data).cpu().sum()
+                train_losses.append(epoch_loss / (batch_idx + 1))
+                
+                pbar.set_postfix({'iter':(batch_idx + 1 + epoch * batchs), 'Epoch_Avg_Loss':epoch_loss / (batch_idx + 1), 'Acc':100. * float(correct) / float(total)})
+                pbar.update(1)
+                
         # 每训练完一个epoch测试一下准确率
-        print("Waiting Test!")
-        with torch.no_grad():
-            bad_data_one_epoch = []
-            correct = 0
-            total = 0
-            for data in dataloaders_dict['val']:
-                net.eval()
+        batchs = len(dataloaders_dict['val'])
+        with tqdm(total=batchs) as pbar:
+            pbar.set_description(f"Val Epoch{epoch + 1}/{config.epochs}")
+            with torch.no_grad():
+                bad_data_one_epoch = []
+                correct = 0
+                total = 0
+                for data in dataloaders_dict['val']:
+                    net.eval()
+                    
+                    if debug:
+                        images, labels, paths = data
+                    else:
+                        images, labels, _ = data
+                    images, labels = images.to(device), labels.to(device)
+                    
+                    outputs = net(images)
+                    _, predicted = torch.max(outputs.data, 1)
+                    
+                    total += labels.size(0)
+                    correct += (predicted == labels).cpu().sum()
+                    if debug: # 如果训练效果不佳可以返回每个epoch里面错误的数据
+                        bad_data_one_epoch.append([paths[predicted == labels],labels[predicted == labels]])
                 
-                if debug:
-                    images, labels, paths = data
-                else:
-                    images, labels, _ = data
-                images, labels = images.to(device), labels.to(device)
+                bad_data.append(bad_data_one_epoch)    
+                acc = 100. * float(correct) / float(total)     
                 
-                outputs = net(images)
-                _, predicted = torch.max(outputs.data, 1)
+                scheduler.step(acc)
                 
-                total += labels.size(0)
-                correct += (predicted == labels).cpu().sum()
-                if debug: # 如果训练效果不佳可以返回每个epoch里面错误的数据
-                    bad_data_one_epoch.append([paths[predicted == labels],labels[predicted == labels]])
-            
-            bad_data.append(bad_data_one_epoch)    
-            acc = 100. * float(correct) / float(total)     
-            
-            scheduler.step(acc)
-            
-            print('测试分类准确率为：%.3f%%' % acc)
+                pbar.set_postfix({'test acc':round(acc, 3)})
+                if acc > max(val_accs):
+                    print("saving best model so far")
+                    torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
 
-            if acc > max(val_accs):
-                print("高准确率，保存模型！")
-                torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
-
-            val_accs.append(acc)
+                val_accs.append(acc)
             
 
     if not os.path.exists(config.outdir):
