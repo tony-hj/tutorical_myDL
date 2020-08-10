@@ -54,13 +54,12 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
 
     for epoch in range(config.epochs):
 
-        print('\nEpoch: %d' % (epoch + 1))
         net.train()
         epoch_loss = 0.0
         correct = 0.0
         total = 0.0
-        
         batchs = len(dataloaders_dict['train'])
+        
         with tqdm(total=batchs) as pbar:
             pbar.set_description(f"Train Epoch{epoch + 1}/{config.epochs}")
 
@@ -88,9 +87,7 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
                 pbar.update(1)
                 
         # 每训练完一个epoch测试一下准确率
-        batchs = len(dataloaders_dict['val'])
-        with tqdm(total=batchs) as pbar:
-            pbar.set_description(f"Val Epoch{epoch + 1}/{config.epochs}")
+        print("\tWaiting Test!  ", end='')
             with torch.no_grad():
                 bad_data_one_epoch = []
                 correct = 0
@@ -117,9 +114,10 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
                 
                 scheduler.step(acc)
                 
-                pbar.set_postfix({'test acc':round(acc, 3)})
+                print('测试分类准确率为：%.3f%%' % acc)
+
                 if acc > max(val_accs):
-                    print("saving best model so far")
+                    print("\tsaving best model so far")
                     torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
 
                 val_accs.append(acc)
