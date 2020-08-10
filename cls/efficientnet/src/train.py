@@ -61,7 +61,7 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
         batchs = len(dataloaders_dict['train'])
         
         with tqdm(total=batchs) as pbar:
-            pbar.set_description(f"Train Epoch{epoch + 1}/{config.epochs}")
+            pbar.set_description(f"Train Epoch {epoch + 1} / {config.epochs}")
 
             for batch_idx, data in enumerate(dataloaders_dict['train'], 0):
 
@@ -83,45 +83,47 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
                 correct += predicted.eq(target.data).cpu().sum()
                 train_losses.append(epoch_loss / (batch_idx + 1))
                 
-                pbar.set_postfix({'iter':(batch_idx + 1 + epoch * batchs), 'Epoch_Avg_Loss':epoch_loss / (batch_idx + 1), 'Acc':100. * float(correct) / float(total)})
+                pbar.set_postfix({'iter':           (batch_idx + 1 + epoch * batchs), 
+                                  'Epoch_Avg_Loss': epoch_loss / (batch_idx + 1), 
+                                  'Acc':            100. * float(correct) / float(total)})
                 pbar.update(1)
                 
         # 每训练完一个epoch测试一下准确率
         print("\tWaiting Test!  ", end='')
-            with torch.no_grad():
-                bad_data_one_epoch = []
-                correct = 0
-                total = 0
-                for data in dataloaders_dict['val']:
-                    net.eval()
-                    
-                    if debug:
-                        images, labels, paths = data
-                    else:
-                        images, labels, _ = data
-                    images, labels = images.to(device), labels.to(device)
-                    
-                    outputs = net(images)
-                    _, predicted = torch.max(outputs.data, 1)
-                    
-                    total += labels.size(0)
-                    correct += (predicted == labels).cpu().sum()
-                    if debug: # 如果训练效果不佳可以返回每个epoch里面错误的数据
-                        bad_data_one_epoch.append([paths[predicted == labels],labels[predicted == labels]])
+        with torch.no_grad():
+            bad_data_one_epoch = []
+            correct = 0
+            total = 0
+            for data in dataloaders_dict['val']:
+                net.eval()
                 
-                bad_data.append(bad_data_one_epoch)    
-                acc = 100. * float(correct) / float(total)     
+                if debug:
+                    images, labels, paths = data
+                else:
+                    images, labels, _ = data
+                images, labels = images.to(device), labels.to(device)
                 
-                scheduler.step(acc)
+                outputs = net(images)
+                _, predicted = torch.max(outputs.data, 1)
                 
-                print('测试分类准确率为：%.3f%%' % acc)
-
-                if acc > max(val_accs):
-                    print("\tsaving best model so far")
-                    torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
-
-                val_accs.append(acc)
+                total += labels.size(0)
+                correct += (predicted == labels).cpu().sum()
+                if debug: # 如果训练效果不佳可以返回每个epoch里面错误的数据
+                    bad_data_one_epoch.append([paths[predicted == labels],labels[predicted == labels]])
             
+            bad_data.append(bad_data_one_epoch)    
+            acc = 100. * float(correct) / float(total)     
+            
+            scheduler.step(acc)
+            
+            print('测试分类准确率为：%.3f%%' % acc)
+
+            if acc > max(val_accs):
+                print("\tsaving best model so far")
+                torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
+
+            val_accs.append(acc)
+        
 
     if not os.path.exists(config.outdir):
         os.mkdir(config.outdir)
