@@ -86,14 +86,18 @@ train_transform = transforms.Compose([
 ])
 
 batch_size = 20
-num_workers = 0
-num_classes = 2
-root = '/content/src/Data-split'
-epochs = 20
-model_path = ''
-outdir = './output'
+num_workers = 4
 label_smooth = True
 LR = 1e-3
+
+# 下面的参数一般要改
+
+num_classes = 2
+root = './' # 传给data_pps的参数
+epochs = 20
+model_path = '' # 预训练模型的位置
+outdir = './'
+
 
 
 

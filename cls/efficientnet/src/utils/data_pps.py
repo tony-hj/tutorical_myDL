@@ -22,6 +22,8 @@ def get_lists(root=root,type=1,merge=False,img_dir=''):# mydict指定***.txt的�
     2. label ... 由数字标签组成
     3. cls2id {cls_1:0, cls_2:1}
     '''
+    
+    # 本次针对海洋生物数据集
     species = pd.read_csv(os.path.join(root,'species.csv'))
     cls2id = {list(species.ScientificName)[i]:list(species.ID)[i] for i in range(species.shape[0])}
 

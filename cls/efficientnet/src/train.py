@@ -121,7 +121,8 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
             val_accs.append(acc)
             
 
-
+    if not os.path.exists(config.outdir):
+        os.mkdir(config.outdir)
     torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
     if debug:
         return bad_data # [[path&class],[],[],[]]

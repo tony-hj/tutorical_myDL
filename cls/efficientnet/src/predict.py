@@ -9,18 +9,19 @@ import numpy as np
 import time
 import pandas as pd
 import argparse
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--seed",type=int,default=123,help='path = os.listdir(root)[seed]')
 args = parser.parse_args()
-
-
-test_data = pd.read_csv('/content/dataset/annotation.csv')
-
 
 net = EfficientNet.from_pretrained('efficientnet-b4', num_classes=num_classes)
 net.load_state_dict(torch.load(model_path,torch.device('cpu')))
 net.eval()
 
+
+
+
+test_data = pd.read_csv('/content/dataset/annotation.csv')
 
 start = time.time()
 filename = test_data.iloc[args.seed,0] + '.jpg'
