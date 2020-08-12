@@ -1,6 +1,3 @@
-#-------------------------------------#
-#       创建YOLO类
-#-------------------------------------#
 import cv2
 import numpy as np
 import colorsys
@@ -24,24 +21,8 @@ def preprocess_input(image):
     image /= std
     return image
 
-#--------------------------------------------#
-#   使用自己训练好的模型预测需要修改3个参数
-#   model_path和classes_path和phi都需要修改！
-#--------------------------------------------#
-class EfficientDet(object):
-    # _defaults = {
-    #     "model_path": 'model_data/efficientdet-d0.pth',
-    #     "phi": 0,
-    #     "confidence": 0.3,
-    #     "cuda": True
-    # }
 
-    @classmethod
-    def get_defaults(cls, n):
-        if n in cls._defaults:
-            return cls._defaults[n]
-        else:
-            return "Unrecognized attribute name '" + n + "'"
+class EfficientDet(object):
 
     #---------------------------------------------------#
     #   初始化Efficientdet
@@ -85,6 +66,7 @@ class EfficientDet(object):
     #   检测图片
     #---------------------------------------------------#
     def detect_image(self, image):
+
         image_shape = np.array(np.shape(image)[0:2])
 
         crop_img = np.array(letterbox_image(image, (image_sizes[self.phi],image_sizes[self.phi])))
@@ -108,7 +90,8 @@ class EfficientDet(object):
         try:
             batch_detections = batch_detections[0].cpu().numpy()
         except:
-            return image
+            print('置信度过高，没有找到符合条件的目标')
+            return image, 0, 0
             
         top_index = batch_detections[:,4] > self.confidence
         top_conf = batch_detections[top_index,4]

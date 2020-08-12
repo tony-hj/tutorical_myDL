@@ -89,7 +89,6 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
                 pbar.update(1)
                 
         # 每训练完一个epoch测试一下准确率
-        print("\tWaiting Test!  ", end='')
         with torch.no_grad():
             bad_data_one_epoch = []
             correct = 0
@@ -116,7 +115,7 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
             
             scheduler.step(acc)
             
-            print('测试分类准确率为：%.3f%%' % acc)
+            print('\t测试分类准确率为：%.3f%%' % acc)
 
             if acc > max(val_accs):
                 print("\tsaving best model so far")

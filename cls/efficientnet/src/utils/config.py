@@ -96,7 +96,7 @@ num_classes = 20
 root = './' # 传给data_pps的参数
 epochs = 20
 model_path = '' # 预训练模型的位置
-outdir = './'
+outdir = './' # 路径后面不能有斜杠   '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
 
 
 
