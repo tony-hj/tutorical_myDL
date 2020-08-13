@@ -74,7 +74,7 @@ class FRCNN(object):
             decodebox = DecodeBox(self.std, self.mean, self.num_classes)
             outputs = decodebox.forward(roi_cls_locs, roi_scores, rois, height=height, width=width, score_thresh = self.confidence)
             if len(outputs)==0:
-                return old_image
+                return old_image,0,0
             bbox = outputs[:,:4]
             conf = outputs[:, 4]
             label = outputs[:, 5]
@@ -124,4 +124,4 @@ class FRCNN(object):
             del draw
         
         print("time:",time.time()-start_time)
-        return image
+        return image, predicted_class, score
