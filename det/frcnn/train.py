@@ -105,9 +105,10 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model_dict = model.state_dict()
     pretrained_dict = torch.load(args.pre_model) if args.pre_model else load_url(model_urls[args.backbone], map_location=device)
-    pretrained_dict = {k: v for k, v in pretrained_dict.items() if np.shape(model_dict[k]) ==  np.shape(v)}
+    pretrained_dict = {k: v for k, v in pretrained_dict.items() if np.shape(model_dict[k]) ==  np.shape(v) and k[-19:] != 'num_batches_tracked'}
     model_dict.update(pretrained_dict)
     model.load_state_dict(model_dict)
+    print(model.state_dict()['extractor.4.0.bn1.num_batches_tracked'])
     print('Finished!')
 
     cudnn.benchmark = True
@@ -144,7 +145,6 @@ if __name__ == "__main__":
     for epoch in range(Init_Epoch,Freeze_Epoch+Unfreeze_Epoch):
         if epoch == Freeze_Epoch:
             lr = lr / 10
-            Batch_size = int(Batch_size / 4)
             for param in model.extractor.parameters():
                 param.requires_grad = True
             print('unfreezed !')
