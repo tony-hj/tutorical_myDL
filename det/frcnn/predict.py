@@ -3,19 +3,10 @@
 #-------------------------------------#
 from frcnn import FRCNN
 from PIL import Image
-
-
-
-while True:
-    img = input('Input image filename:')
-    try:
-        image = Image.open(img)
-    except:
-        print('Open Error! Try again!')
-        continue
-    else:
-        r_image = frcnn.detect_image(image)
-        r_image.show()
+import argparse
+import os
+import matplotlib.pyplot as plt
+import random
 
 
 def show_imgs(imgs, labels, scores, cols=5):
