@@ -103,7 +103,7 @@ def fit_one_epoch(net,focal_loss,epoch,epoch_size,epoch_size_val,gen,genval,Epoc
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="...")
-    parser.add_argument("lr", type=float, help="learning_rate", default=1e-3)
+    parser.add_argument("--lr", type=float, help="learning_rate", default=1e-3)
     parser.add_argument("-f", "--freeze", type=int, help="frozen_epoches", default=5)
     parser.add_argument("-u", "--unfreeze", type=int, help="free_epoches", default=5)
     parser.add_argument('-v', "--version", type=int, help='you want to use efficientdet-dX?', default=0)
@@ -152,7 +152,7 @@ if __name__ == "__main__":
     # 初始化参数
     lr = args.lr
     Batch_size = args.batch_size
-    Init_Epoch = int(args.pre_model.split('/')[-1].split('-')[0][5:])
+    Init_Epoch = int(args.pre_model.split('/')[-1].split('-')[0][5:]) if args.pre_model else 0
     Freeze_Epoch = args.freeze
     Unfreeze_Epoch = args.unfreeze
     
@@ -182,16 +182,17 @@ if __name__ == "__main__":
     for epoch in range(Init_Epoch,Freeze_Epoch+Unfreeze_Epoch):
         # 全部解冻
         if epoch == Freeze_Epoch:
+            print('unfreezed !')
             lr = lr / 10
             Batch_size = int(Batch_size / 4)
             for param in model.backbone_net.parameters():
                 param.requires_grad = True
-            print('unfreezed !')
+            
             gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=4, pin_memory=True,
                                     drop_last=True, collate_fn=efficientdet_dataset_collate)
             gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=4,pin_memory=True, 
                                     drop_last=True, collate_fn=efficientdet_dataset_collate)
-
+        # 保存最优权重的逻辑（内存不够，所以保存最优）
         total_loss, val_loss, weight = fit_one_epoch(net,efficient_loss,epoch,epoch_size,epoch_size_val,gen,gen_val,Freeze_Epoch+Unfreeze_Epoch)
         lr_scheduler.step(val_loss)
         val_losses.append(val_loss)
