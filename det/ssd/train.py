@@ -15,7 +15,7 @@ import torch.nn.init as init
 import config
 import argparse
 from torch.utils.model_zoo import load_url
-
+from tqdm import tqdm
 def adjust_learning_rate(optimizer, lr, gamma, step):
     lr = lr * (gamma ** (step))
     for param_group in optimizer.param_groups:
@@ -120,13 +120,13 @@ if __name__ == "__main__":
 
     for epoch in range(Init_Epoch, args.freeze + args.unfreeze):
         # 解冻逻辑
-        if epoch == Freeze_epoch:
+        if epoch == args.freeze:
             print('unfreezing')
             args.lr /= 10
             for param in model.vgg.parameters():
                 param.requires_grad = True
 
-        train_one_epoch(args.lr, epoch, gen, net, optimizer, criterion, epoch_size, Epoch)
+        train_one_epoch(args.lr, epoch, gen, net, optimizer, criterion, epoch_size, args.freeze + args.unfreeze)
 
 
 

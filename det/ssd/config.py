@@ -1,2 +1,2 @@
 classes = ['red', 'green']
-num_classes = len(classes)
+num_classes = len(classes)+1
