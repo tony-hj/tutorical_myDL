@@ -27,7 +27,7 @@ parser.add_argument("-p", "--model_path", type=str, help="frozen_epoches")
 parser.add_argument("-c", "--conf", type=float, help="cinfidence", default=0.3)
 parser.add_argument('-g', "--cuda", type=bool, help='do you have a gpu?', default=True)
 parser.add_argument('-n', "--num2show", type=int, help='num img 2 show', default=1)
-parser.add_argument('-r', "--root", type=str, help='root dir filled with *.jpg')
+parser.add_argument('-r', "--root", type=str, help='root dir filled with *.jpg', default='VOCdevkit/VOC2007/JPEGImages')
 parser.add_argument('-i', "--filename", type=str, help='filename', default='')
 
 args = parser.parse_args()
