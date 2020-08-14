@@ -199,4 +199,4 @@ if __name__ == "__main__":
         train_losses.append(total_loss)
         if max(val_losses) == val_loss:
             print('\n*************************** best val_loss, saving... ***************************\n')
-            torch.save(weight, 'logs/Epoch%d-Total_Loss%.4f-Val_Loss%.4f.pth'%((epoch+1),total_loss/(epoch_size+1),val_loss/(epoch_size_val+1)))
+            torch.save(weight, './Epoch%d-Total_Loss%.4f-Val_Loss%.4f.pth'%((epoch+1),total_loss/(epoch_size+1),val_loss/(epoch_size_val+1)))

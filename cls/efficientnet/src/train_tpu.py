@@ -18,9 +18,12 @@ import torch_xla.distributed.xla_multiprocessing as xmp
 import torch_xla.utils.utils as xu
 from utils.label_smooth import LabelSmoothSoftmaxCE
 from efficientnet_pytorch import EfficientNet
-
+import os
+if os.environ.get('COLAB_GPU', 0) == 1:
+  os.environ['GPU_NUM_DEVICES'] = '1'
+  os.environ['XLA_FLAGS'] = '--xla_gpu_cuda_data_dir=/usr/local/cuda/'
 FLAGS = {}
-FLAGS['batch_size'] = 20
+FLAGS['batch_size'] = 4
 FLAGS['num_workers'] = 4
 FLAGS['learning_rate'] = 0.002
 FLAGS['num_epochs'] = 20
@@ -55,10 +58,16 @@ def train_resnet18():
       sampler=train_sampler,
       num_workers=FLAGS['num_workers'],
       drop_last=True)
+  # test_sampler不一定有用 减少batch_size才是王道
+  test_sampler = torch.utils.data.distributed.DistributedSampler(
+      test_dataset,
+      num_replicas=xm.xrt_world_size(),
+      rank=xm.get_ordinal(),
+      shuffle=False)
   test_loader = torch.utils.data.DataLoader(
       test_dataset,
       batch_size=FLAGS['batch_size'],
-      shuffle=False,
+      sampler=test_sampler,
       num_workers=FLAGS['num_workers'],
       drop_last=True)
 
