@@ -24,8 +24,6 @@ if config.model_path:
 else:
     net = EfficientNet.from_pretrained('efficientnet-b4',num_classes=config.num_classes)
 
-#net._fc.out_features = config.num_classes
-
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 if torch.cuda.device_count() > 1:
@@ -37,11 +35,10 @@ if not os.path.exists(config.outdir):
     os.mkdir(config.outdir)
 
 net = net.to(device)
-params_to_update = net.parameters()
 dataloaders_dict, cls2id = get_debug_loader(type=4,merge=True,img_dir='/content/src/Images-processed')
 
 criterion = LabelSmoothSoftmaxCE() if config.label_smooth else nn.CrossEntropyLoss().to(device)
-optimizer = optim.Adam(params_to_update, lr=config.LR, betas=(0.9, 0.999), eps=1e-9)
+optimizer = optim.Adam(net.parameters(), lr=config.LR, betas=(0.9, 0.999), eps=1e-9)
 scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True)
 # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=Config.milestone, gamma=0.1)
 
