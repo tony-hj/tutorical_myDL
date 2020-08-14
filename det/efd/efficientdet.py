@@ -101,9 +101,6 @@ class EfficientDet(object):
 
         # 去掉灰条
         boxes = efficientdet_correct_boxes(top_ymin,top_xmin,top_ymax,top_xmax,np.array([image_sizes[self.phi],image_sizes[self.phi]]),image_shape)
-
-        font = ImageFont.truetype(font='model_data/simhei.ttf',size=np.floor(3e-2 * np.shape(image)[1] + 0.5).astype('int32'))
-
         thickness = (np.shape(image)[0] + np.shape(image)[1]) // image_sizes[self.phi]
 
         for i, c in enumerate(top_label):
@@ -140,7 +137,7 @@ class EfficientDet(object):
             draw.rectangle(
                 [tuple(text_origin), tuple(text_origin + label_size)],
                 fill=self.colors[self.class_names.index(predicted_class)])
-            draw.text(text_origin, str(label,'UTF-8'), fill=(0, 0, 0), font=font)
+            draw.text(text_origin, str(label,'UTF-8'), fill=(0, 0, 0))
             del draw
         return image, predicted_class, score
 
