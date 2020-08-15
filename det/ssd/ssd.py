@@ -58,8 +58,7 @@ class SSD(object):
     def detect_image(self, image):
         image_shape = np.array(np.shape(image)[0:2])
 
-        crop_img = np.array(letterbox_image(image, (self.model_image_size[0],self.model_image_size[1])))
-        photo = np.array(crop_img,dtype = np.float64)
+        crop_img = np.array(letterbox_image(image, (self.model_image_size[0],self.model_image_size[1]))).astype(np.float64)
         # 图片预处理，归一化
         with torch.no_grad():
             photo = Variable(torch.from_numpy(np.expand_dims(np.transpose(crop_img-MEANS,(2,0,1)),0)).type(torch.FloatTensor))
@@ -111,7 +110,7 @@ class SSD(object):
             # 画框框
             label = '{} {:.2f}'.format(predicted_class, score)
             draw = ImageDraw.Draw(image)
-            label_size = draw.textsize(label, font)
+            label_size = draw.textsize(label)
             label = label.encode('utf-8')
             print(label)
             
