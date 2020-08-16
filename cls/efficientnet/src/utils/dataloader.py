@@ -52,48 +52,9 @@ class test_dataset_tta(Dataset):
         
         
 
-
-
-
-
-def get_loader():    #  image folder 能够直接返回数据集，不用data_pps,但是不灵活
-   
-    data_transforms = {'train':config.train_transform,'val':config.test_transform}
+def get_debug_loader(root):    #  得到的dataloader 能够返回路径
     
-    image_datasets = {x: torchvision.datasets.ImageFolder(os.path.join(config.root, x), data_transforms[x]) for x in ['train', 'val']}
-
-    train_loader = torch.utils.data.DataLoader(
-        image_datasets['train'],
-        batch_size=config.batch_size,
-        shuffle=True,
-        num_workers=config.num_workers,
-        pin_memory=True,
-        drop_last=True,
-    )
-    val_loader = torch.utils.data.DataLoader(
-        image_datasets['val'],
-        batch_size=config.batch_size,
-        num_workers=config.num_workers,
-        shuffle=False,
-        pin_memory=True,
-        drop_last=False,
-    )
-    # test_loader = torch.utils.data.DataLoader(
-        # image_datasets['test'],
-        # batch_size=batch_size,
-        # num_workers=num_workers,
-        # shuffle=False,
-        # pin_memory=True,
-        # drop_last=False,
-    # )
-    dataloaders_dict = {'train':train_loader,'val':val_loader}
-    
-    return dataloaders_dict , image_datasets['train'].class_to_idx
-    
-
-def get_debug_loader(type=1,merge=False,img_dir=''):    #  得到的dataloader 能够返回路径
-    
-    paths_all,labels,cls2id = get_lists(type=type,merge=merge,img_dir=img_dir)
+    paths_all,labels,cls2id = get_lists(root)
     
     
     train_loader = DataLoader_pre(MYDataset(paths_all['train'],labels['train'],config.train_transform), 
@@ -111,9 +72,9 @@ def get_debug_loader(type=1,merge=False,img_dir=''):    #  得到的dataloader �
     return dataloaders_dict,cls2id
     
     
-def get_tta_loader():  # 对于val 做tta
+def get_tta_loader(root):  # 对于val 做tta
     
-    paths_all,labels,cls2id = get_lists(type=type,merge=merge,img_dir=img_dir)
+    paths_all,labels,cls2id = get_lists(root)
     
     tta_loader = DataLoader_pre(test_dataset_tta(paths_all['val'],labels['val'],config.tta_trans_list), 
                                         batch_size=config.batch_size, 

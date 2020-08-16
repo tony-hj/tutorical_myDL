@@ -3,7 +3,6 @@ import numpy as np
 from shutil import copyfile
 from random import shuffle
 from glob import glob
-from utils.config import root
 import pandas as pd
 
 '''
@@ -14,7 +13,7 @@ cls 单词
 id 数字
 '''
 
-def get_lists(root=root,type=1,merge=False,img_dir=''):# mydict指定***.txt的地址
+def get_lists(root):# mydict指定***.txt的地址
     
     '''
     returns

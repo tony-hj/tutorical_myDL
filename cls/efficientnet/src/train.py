@@ -14,7 +14,7 @@ from tqdm import tqdm
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import utils.config as config
 from tqdm import tqdm 
-#==========================================
+from mean_std import calc_mean_std
 torch.manual_seed(123)            # 为CPU设置随机种子
 torch.cuda.manual_seed(123)       # 为当前GPU设置随机种子
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
@@ -34,8 +34,10 @@ if torch.cuda.device_count() > 1:
 if not os.path.exists(config.outdir):
     os.mkdir(config.outdir)
 
+mean, std = calc_mean_std() # 会自动打印，由你决定改不改
+
 net = net.to(device)
-dataloaders_dict, cls2id = get_debug_loader(type=4,merge=True,img_dir='/content/src/Images-processed')
+dataloaders_dict, cls2id = get_debug_loader(config.root)
 
 criterion = LabelSmoothSoftmaxCE() if config.label_smooth else nn.CrossEntropyLoss().to(device)
 optimizer = optim.Adam(net.parameters(), lr=config.LR, betas=(0.9, 0.999), eps=1e-9)

@@ -7,10 +7,14 @@ from utils.data_pps import get_lists
 import utils.config as config
 from tqdm import tqdm
 
-def calc_mean_std(path):
-
+def calc_mean_std():
+    path, _, _ = get_lists(config.root)
+    path = path['train']+path['val']
+    mean = np.array([0.4914, 0.4822, 0.4465])
+    std = np.array([0.2470, 0.2435, 0.2616])
+    print('default mean & std: \n', mean, std)
     means = [0, 0, 0]
-    stdevs = [0, 0, 0]
+    std = [0, 0, 0]
 
     index = 1
     num_imgs = 0
@@ -22,19 +26,14 @@ def calc_mean_std(path):
             stdevs[i] += img[:, :, i].std()
 
     means.reverse()
-    stdevs.reverse()
+    std.reverse()
 
     means = np.asarray(means) / num_imgs
-    stdevs = np.asarray(stdevs) / num_imgs
-    return means,stdevs
+    std = np.asarray(stdevs) / num_imgs
+    print('our dataset: \n', mean, std)
+    return means,std
 
-if __name__ == '__main__':
-    mean = np.array([0.4914, 0.4822, 0.4465])
-    std = np.array([0.2470, 0.2435, 0.2616])
-    path = get_lists(config.root)
-    path = path['train']+path['val']
-    print('original: \n', mean, std)
-    mean, std = calc_mean_std(path)
-    print('new: \n', mean, std)
+
+
     
 
