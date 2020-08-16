@@ -3,23 +3,23 @@ import numpy as np
 import cv2
 import random
 import os
-from data_pps import get_lists
-import config
-# calculate means and std  注意换行\n符号
-# train.txt中每一行是图像的位置信息
-def calc_mean_std(path)
+from utils.data_pps import get_lists
+import utils.config as config
+from tqdm import tqdm
+
+def calc_mean_std(path):
 
     means = [0, 0, 0]
     stdevs = [0, 0, 0]
 
     index = 1
     num_imgs = 0
-    for each in path
-            num_imgs += 1
-            img = cv2.imread(each).astype(np.float32) / 255.
-            for i in range(3):
-                means[i] += img[:, :, i].mean()
-                stdevs[i] += img[:, :, i].std()
+    for each in tqdm(path):
+        num_imgs += 1
+        img = cv2.imread(each).astype(np.float32) / 255.
+        for i in range(3):
+            means[i] += img[:, :, i].mean()
+            stdevs[i] += img[:, :, i].std()
 
     means.reverse()
     stdevs.reverse()
