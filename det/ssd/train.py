@@ -16,6 +16,7 @@ import config
 import argparse
 from torch.utils.model_zoo import load_url
 from tqdm import tqdm
+import urllib
 def adjust_learning_rate(optimizer, lr, gamma, step):
     lr = lr * (gamma ** (step))
     for param_group in optimizer.param_groups:
@@ -82,7 +83,9 @@ if __name__ == "__main__":
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model_dict = model.state_dict()
-    pretrained_dict = load_url('https://github.com/you-bowen/tutorical_myDL/releases/download/1.0/ssd_weights.pth', map_location=device)
+    # 旧版pytorch有哈希验证，这里咱也不爱改名字，就这样吧
+    urllib.request.urlretrieve('https://github.com/you-bowen/tutorical_myDL/releases/download/1.0/ssd_weights.pth', "ssd_weights.pth")
+    pretrained_dict = torch.load('ssd_weights.pth', map_location=device)
     pretrained_dict = {k: v for k, v in pretrained_dict.items() if np.shape(model_dict[k]) ==  np.shape(v)}
     model_dict.update(pretrained_dict)
     model.load_state_dict(model_dict)

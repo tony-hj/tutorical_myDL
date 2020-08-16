@@ -83,6 +83,7 @@ class FRCNN(object):
             bbox[:, 1::2] = (bbox[:, 1::2])/height*old_height
             bbox = np.array(bbox,np.int32)
         image = old_image
+        font = ImageFont.truetype(font='utils/simhei.ttf',size=np.floor(3e-2 * np.shape(image)[1] + 0.5).astype('int32'))
         thickness = (np.shape(old_image)[0] + np.shape(old_image)[1]) // old_width*2
                 
         for i, c in enumerate(label):
@@ -119,7 +120,7 @@ class FRCNN(object):
             draw.rectangle(
                 [tuple(text_origin), tuple(text_origin + label_size)],
                 fill=self.colors[int(c)])
-            draw.text(text_origin, str(label,'UTF-8'), fill=(0, 0, 0))
+            draw.text(text_origin, str(label,'UTF-8'), fill=(0, 0, 0), font=font)
             del draw
         
         print("time:",time.time()-start_time)

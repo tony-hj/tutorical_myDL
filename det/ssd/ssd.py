@@ -90,6 +90,7 @@ class SSD(object):
 
         # 去掉灰条
         boxes = ssd_correct_boxes(top_ymin,top_xmin,top_ymax,top_xmax,np.array([self.model_image_size[0],self.model_image_size[1]]),image_shape)
+        font = ImageFont.truetype(font='utils/simhei.ttf',size=np.floor(3e-2 * np.shape(image)[1] + 0.5).astype('int32'))
         thickness = (np.shape(image)[0] + np.shape(image)[1]) // self.model_image_size[0]
 
         for i, c in enumerate(top_label):
@@ -110,7 +111,7 @@ class SSD(object):
             # 画框框
             label = '{} {:.2f}'.format(predicted_class, score)
             draw = ImageDraw.Draw(image)
-            label_size = draw.textsize(label)
+            label_size = draw.textsize(label,font)
             label = label.encode('utf-8')
             print(label)
             
@@ -126,7 +127,7 @@ class SSD(object):
             draw.rectangle(
                 [tuple(text_origin), tuple(text_origin + label_size)],
                 fill=self.colors[self.class_names.index(predicted_class)])
-            draw.text(text_origin, str(label,'UTF-8'), fill=(0, 0, 0))
+            draw.text(text_origin, str(label,'UTF-8'), fill=(0, 0, 0), font=font)
             del draw
         return image, predicted_class, score
 
