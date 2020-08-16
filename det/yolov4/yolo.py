@@ -24,8 +24,9 @@ class YOLO(object):
         self.confidence = conf
         self.class_names = classes
         self.model_image_size = (416,416,3)
-        self.anchors_path = 'yolo_anchors.txt''
+        self.anchors_path = 'yolo_anchors.txt'
         self.anchors = self._get_anchors()
+        self.cuda = cuda
         self.generate()
 
     def _get_anchors(self):
@@ -100,7 +101,7 @@ class YOLO(object):
         try:
             batch_detections = batch_detections[0].cpu().numpy()
         except:
-            return image
+            return image,0,0
             
         top_index = batch_detections[:,4]*batch_detections[:,5] > self.confidence
         top_conf = batch_detections[top_index,4]*batch_detections[top_index,5]
@@ -151,5 +152,5 @@ class YOLO(object):
                 fill=self.colors[self.class_names.index(predicted_class)])
             draw.text(text_origin, str(label,'UTF-8'), fill=(0, 0, 0), font=font)
             del draw
-        return image
+        return image,predicted_class,score
 

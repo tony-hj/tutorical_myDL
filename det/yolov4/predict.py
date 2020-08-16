@@ -31,7 +31,7 @@ parser.add_argument("-c", "--conf", type=float, help="cinfidence", default=0.3)
 parser.add_argument('-v', "--version", type=int, help='you want to use efficientdet-dX?', default=0)
 parser.add_argument('-g', "--cuda", type=bool, help='do you have a gpu?', default=True)
 parser.add_argument('-n', "--num2show", type=int, help='num img 2 show', default=1)
-parser.add_argument('-r', "--root", type=str, help='root dir filled with *.jpg')
+parser.add_argument('-r', "--root", type=str, help='root dir filled with *.jpg', default='VOCdevkit/VOC2007/JPEGImages')
 parser.add_argument('-i', "--filename", type=str, help='filename', default='')
 
 args = parser.parse_args()
@@ -40,7 +40,7 @@ yolo = YOLO(args.model_path, args.conf, args.cuda)
 
 if args.num2show == 1:
     image = Image.open(os.path.join(args.root,args.filename))
-    res, cls, score = efficientdet.detect_image(image)
+    res, cls, score = yolo.detect_image(image)
     print(cls, score)
     # r_image.show()
     
@@ -52,7 +52,7 @@ else:
     ress, clss, scores = [], [], []
     print(len(imgs))
     for img in imgs:
-        res, cls, score = efficientdet.detect_image(img)
+        res, cls, score = yolo.detect_image(img)
         ress.append(res)
         clss.append(cls)
         scores.append(score)
