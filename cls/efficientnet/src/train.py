@@ -7,13 +7,14 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 from efficientnet_pytorch import EfficientNet
 from utils.label_smooth import LabelSmoothSoftmaxCE
-import os
+import utils.config as config
 from utils.dataloader import get_debug_loader
+from utils.ranger import Ranger
+import os
 from PIL import ImageFile
 from tqdm import tqdm
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-import utils.config as config
-from tqdm import tqdm 
+
 from mean_std import calc_mean_std
 torch.manual_seed(123)            # 为CPU设置随机种子
 torch.cuda.manual_seed(123)       # 为当前GPU设置随机种子
@@ -41,6 +42,7 @@ dataloaders_dict, cls2id = get_debug_loader(config.root)
 
 criterion = LabelSmoothSoftmaxCE() if config.label_smooth else nn.CrossEntropyLoss().to(device)
 optimizer = optim.Adam(net.parameters(), lr=config.LR, betas=(0.9, 0.999), eps=1e-9)
+# optimizer = Ranger(net.parameters(), lr=config.LR)
 scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True)
 # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=Config.milestone, gamma=0.1)
 
