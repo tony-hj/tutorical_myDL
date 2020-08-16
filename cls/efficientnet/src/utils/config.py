@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from PIL import Image
 import torchvision
+from utils.auto_augment import AutoAugment
 
 class Resize_propotion(object):
     """
@@ -77,10 +78,10 @@ test_transform = transforms.Compose([
 ])
 
 train_transform = transforms.Compose([
-    torchvision.transforms.Resize(input_size),
+    torchvision.transforms.Resize(input_size),# 要不要加随即裁剪呢
     torchvision.transforms.CenterCrop(input_size),
-    torchvision.transforms.RandomAffine(degrees=0, translate=(0.05, 0.05)),
-    torchvision.transforms.RandomHorizontalFlip(),
+    # Resize_propotion(input_size),
+    AutoAugment(dataset='IMAGENET'),
     torchvision.transforms.ToTensor(),
     torchvision.transforms.Normalize(mean, std),
 ])
