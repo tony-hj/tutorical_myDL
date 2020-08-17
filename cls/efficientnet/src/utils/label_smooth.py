@@ -4,7 +4,7 @@
 
 import torch
 import torch.nn as nn
-
+import utils.config as config
 
 class LabelSmoothSoftmaxCE(nn.Module):
     def __init__(self,
@@ -21,6 +21,8 @@ class LabelSmoothSoftmaxCE(nn.Module):
         self.log_softmax = nn.LogSoftmax(1)
 
     def forward(self, logits, label):
+        if config.use_sample_weight:
+            weights = torch.Tensor([config.sample_weight[int(i)] for i in label]).cuda()
         logs = self.log_softmax(logits)
         ignore = label.data.cpu() == self.lb_ignore
         n_valid = (ignore == 0).sum()
@@ -32,11 +34,11 @@ class LabelSmoothSoftmaxCE(nn.Module):
         _, M = ignore.size()
         a, *b = ignore.chunk(M, dim=1)
         label[[a, torch.arange(label.size(1)), *b]] = 0
-
-        if self.reduction == 'mean':
+        if config.use_sample_weight:
+            loss = -torch.sum(torch.sum(logs*label, dim=1)*weights) / n_valid
+        else:
             loss = -torch.sum(torch.sum(logs*label, dim=1)) / n_valid
-        elif self.reduction == 'none':
-            loss = -torch.sum(logs*label, dim=1)
+
         return loss
 
 

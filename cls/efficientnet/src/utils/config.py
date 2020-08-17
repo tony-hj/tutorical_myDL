@@ -4,6 +4,8 @@ import torch
 from PIL import Image
 import torchvision
 from utils.auto_augment import AutoAugment
+import pandas as pd
+
 
 class Resize_propotion(object):
     """
@@ -28,9 +30,10 @@ class Resize_propotion(object):
 
         img = img.resize(self.size, self.interpolation)
         return img
-
+        
+# 224 240 260 300 380 456 528 600
 input_size = 380
-
+# [0.26958571 0.3887648  0.41509606] [0.16806719 0.18439094 0.18346951]
 mean = np.array([0.4914, 0.4822, 0.4465])
 std = np.array([0.2470, 0.2435, 0.2616])
 
@@ -81,7 +84,9 @@ train_transform = transforms.Compose([
     torchvision.transforms.Resize(input_size),# 要不要加随即裁剪呢
     torchvision.transforms.CenterCrop(input_size),
     # Resize_propotion(input_size),
-    AutoAugment(dataset='IMAGENET'),
+    torchvision.transforms.RandomAffine(degrees=0, translate=(0.05, 0.05)),
+    torchvision.transforms.RandomHorizontalFlip(),
+    # AutoAugment(dataset='IMAGENET'),
     torchvision.transforms.ToTensor(),
     torchvision.transforms.Normalize(mean, std),
 ])
@@ -90,7 +95,7 @@ batch_size = 20
 num_workers = 4
 label_smooth = True
 LR = 1e-3
-
+cbam = True
 # 下面的参数一般要改
 
 num_classes = 20
@@ -100,6 +105,12 @@ model_path = '' # 预训练模型的位置
 outdir = './' # 路径后面不能有斜杠   '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
 
 
+use_sample_weight = True
+train_df = pd.read_csv('/content/dataset/training.csv')
+train_dist = train_df.groupby('SpeciesID').count()
+mean = len(train_df) / 20
+num_classes = 20
+sample_weight = {i : mean/int(train_dist.loc[i,:]) for i in range(num_classes)}
 
 
 

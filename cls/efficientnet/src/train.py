@@ -5,7 +5,7 @@ import torchvision
 from torch import nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
-from efficientnet_pytorch import EfficientNet
+from efficientnet_pytorch import EfficientNet, cbam_EfficientNet
 from utils.label_smooth import LabelSmoothSoftmaxCE
 import utils.config as config
 from utils.dataloader import get_debug_loader
@@ -20,11 +20,17 @@ torch.manual_seed(123)            # 为CPU设置随机种子
 torch.cuda.manual_seed(123)       # 为当前GPU设置随机种子
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-if config.model_path:
-    net = EfficientNet.from_pretrained('efficientnet-b4',weights_path=config.model_path,num_classes=config.num_classes)
+if config.cbam:  
+    if config.model_path:
+        net = cbam_EfficientNet.from_pretrained('efficientnet-b4',weights_path=config.model_path,num_classes=config.num_classes)
+    else:
+        net = cbam_EfficientNet.from_pretrained('efficientnet-b4',num_classes=config.num_classes)
 else:
-    net = EfficientNet.from_pretrained('efficientnet-b4',num_classes=config.num_classes)
-
+    if config.model_path:
+        net = EfficientNet.from_pretrained('efficientnet-b4',weights_path=config.model_path,num_classes=config.num_classes)
+    else:
+        net = EfficientNet.from_pretrained('efficientnet-b4',num_classes=config.num_classes)
+        
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 if torch.cuda.device_count() > 1:
@@ -41,8 +47,8 @@ net = net.to(device)
 dataloaders_dict, cls2id = get_debug_loader(config.root)
 
 criterion = LabelSmoothSoftmaxCE() if config.label_smooth else nn.CrossEntropyLoss().to(device)
-optimizer = optim.Adam(net.parameters(), lr=config.LR, betas=(0.9, 0.999), eps=1e-9)
-# optimizer = Ranger(net.parameters(), lr=config.LR)
+# optimizer = optim.Adam(net.parameters(), lr=config.LR, betas=(0.9, 0.999), eps=1e-9)
+optimizer = Ranger(net.parameters(), lr=config.LR)
 scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True)
 # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=Config.milestone, gamma=0.1)
 

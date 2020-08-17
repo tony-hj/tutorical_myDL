@@ -81,4 +81,4 @@ def get_tta_loader(root):  # 对于val 做tta
                                         shuffle=True, 
                                         pin_memory=True)
     
-    
+    return tta_loader
