@@ -7,6 +7,7 @@
 # With adjustments and added comments by workingcoder (github username).
 
 import re
+import numpy as np
 import math
 import collections
 from functools import partial
@@ -607,14 +608,15 @@ def load_pretrained_weights(model, model_name, weights_path=None, load_fc=True, 
         state_dict = model_zoo.load_url(url_map_[model_name])
     
     if load_fc:
-        ret = model.load_state_dict(state_dict, strict=False)
-        assert not ret.missing_keys, f'Missing keys when loading pretrained weights: {ret.missing_keys}'
+        # 预训练的模型的项数比cbam少
+        model_dict = model.state_dict() 
+        state_dict = {k: v for k, v in state_dict.items() if np.shape(model_dict[k]) ==  np.shape(v)}
+        model_dict.update(state_dict)
+        model.load_state_dict(model_dict)
+        
     else:
-        state_dict.pop('_fc.weight')
-        state_dict.pop('_fc.bias')
-        ret = model.load_state_dict(state_dict, strict=False)
-        assert set(ret.missing_keys) == set(
-            ['_fc.weight', '_fc.bias']), f'Missing keys when loading pretrained weights: {ret.missing_keys}'
-    assert not ret.unexpected_keys, f'Missing keys when loading pretrained weights: {ret.unexpected_keys}'
-
+        model_dict = model.state_dict() 
+        state_dict = {k: v for k, v in state_dict.items() if np.shape(model_dict[k]) ==  np.shape(v)}
+        model_dict.update(state_dict)
+        model.load_state_dict(model_dict)
     print('Loaded pretrained weights for {}'.format(model_name))
