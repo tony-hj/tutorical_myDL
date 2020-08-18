@@ -587,7 +587,7 @@ url_map_advprop = {
 # TODO: add the petrained weights url map of 'efficientnet-l2'
 
 
-def load_pretrained_weights(model, model_name, weights_path=None, load_fc=True, advprop=False):
+def load_pretrained_weights(model, model_name, weights_path=None, advprop=False):
     """Loads pretrained weights from weights path or download using url.
 
     Args:
@@ -607,16 +607,10 @@ def load_pretrained_weights(model, model_name, weights_path=None, load_fc=True, 
         url_map_ = url_map_advprop if advprop else url_map
         state_dict = model_zoo.load_url(url_map_[model_name])
     
-    if load_fc:
-        # 预训练的模型的项数比cbam少
-        model_dict = model.state_dict() 
-        state_dict = {k: v for k, v in state_dict.items() if np.shape(model_dict[k]) ==  np.shape(v)}
-        model_dict.update(state_dict)
-        model.load_state_dict(model_dict)
-        
-    else:
-        model_dict = model.state_dict() 
-        state_dict = {k: v for k, v in state_dict.items() if np.shape(model_dict[k]) ==  np.shape(v)}
-        model_dict.update(state_dict)
-        model.load_state_dict(model_dict)
+
+    model_dict = model.state_dict() 
+    state_dict = {k: v for k, v in state_dict.items() if np.shape(model_dict[k]) ==  np.shape(v)}
+    model_dict.update(state_dict)
+    model.load_state_dict(model_dict)
+
     print('Loaded pretrained weights for {}'.format(model_name))

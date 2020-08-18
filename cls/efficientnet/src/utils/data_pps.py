@@ -13,7 +13,7 @@ cls 单词
 id 数字
 '''
 
-def get_lists(root):# mydict指定***.txt的地址
+def get_lists(root,idx=-1):# mydict指定***.txt的地址, idx < 5
     
     '''
     returns
@@ -27,22 +27,37 @@ def get_lists(root):# mydict指定***.txt的地址
     cls2id = {list(species.ScientificName)[i]:list(species.ID)[i] for i in range(species.shape[0])}
 
     data = pd.read_csv(os.path.join(root,'training.csv'))
-    data = data.sample(frac=1)
+    data = data.sample(frac=1, random_state=123)
     paths2train = [root+'/data/'+i+'.jpg' for i in list(data['FileID'])]
     labels2train = list(data['SpeciesID'])
 
     anno = pd.read_csv(os.path.join(root,'annotation.csv')) # test.csv文件名和真实标签，用于验证
-    paths4val = [root+'/data/'+i+'.jpg' for i in list(anno['FileID'])]
-    labels4tval = list(anno['SpeciesID'])
+    paths4test = [root+'/data/'+i+'.jpg' for i in list(anno['FileID'])]
+    labels4test = list(anno['SpeciesID'])
 
     path = {}
-    path['train'] = paths2train
-    path['val'] = paths4val
-
     label = {}
-    label['train'] = labels2train
-    label['val'] = labels4tval
+    
+    split = int(0.8*len(paths2train))
+    split_n = [int(i*len(paths2train)) for i in [0,0.2,0.4,0.6,0.8,1]]
+    
+    if idx == -1:
+        path['train'] = paths2train[:split]
+        path['val'] = paths2train[split:]
+        path['test'] = paths4test
 
+        label['train'] = labels2train[:split]
+        label['val'] = labels2train[split:]
+        label['test'] = labels4test
+    else :
+        path['train'] = paths2train[:split_n[idx]]+paths2train[split_n[idx+1]:]
+        path['val'] = paths2train[split_n[idx]:split_n[idx+1]]
+        path['test'] = paths4test
+
+        label['train'] = labels2train[:split_n[idx]]+paths2train[split_n[idx+1]:]
+        label['val'] = labels2train[split_n[idx]:split_n[idx+1]]
+        label['test'] = labels4test
+        
     return path,label,cls2id
 
 

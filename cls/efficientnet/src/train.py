@@ -6,60 +6,66 @@ from torch import nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 from efficientnet_pytorch import EfficientNet, cbam_EfficientNet
+
 from utils.label_smooth import LabelSmoothSoftmaxCE
-import utils.config as config
+import utils.config as cfg
 from utils.dataloader import get_debug_loader
 from utils.ranger import Ranger
+from utils.data_pps import get_lists
+
 import os
+import argparse
 from PIL import ImageFile
 from tqdm import tqdm
-ImageFile.LOAD_TRUNCATED_IMAGES = True
-
+import numpy as np
 from mean_std import calc_mean_std
-torch.manual_seed(123)            # 为CPU设置随机种子
-torch.cuda.manual_seed(123)       # 为当前GPU设置随机种子
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+from torch.utils.model_zoo import load_url
 
-if config.cbam:  
-    if config.model_path:
-        net = cbam_EfficientNet.from_pretrained('efficientnet-b4',weights_path=config.model_path,num_classes=config.num_classes)
-    else:
-        net = cbam_EfficientNet.from_pretrained('efficientnet-b4',num_classes=config.num_classes)
-else:
-    if config.model_path:
-        net = EfficientNet.from_pretrained('efficientnet-b4',weights_path=config.model_path,num_classes=config.num_classes)
-    else:
-        net = EfficientNet.from_pretrained('efficientnet-b4',num_classes=config.num_classes)
+def test(net, test_dict, idx):
+    
+    ids = list(test_path)
+    test_path = test_dict['paths']
+    test_label = test_dict['labels']
+    res = []
+    
+    for i in range(len(test_path)):
+        filename = test_path[i] + '.jpg'
+        image = Image.open(os.path.join(root,filename)).convert('RGB')
+        input = test_transform(image).unsqueeze(0).to(device)
+        output = net(input)
+        label = int(output.argmax())
+        res.append(label)
+
+    final_res = [[ids[i], res[i]] for i in range(len(ids))]
+    df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
+    df.to_csv('id_{}.csv'.format(idx),index=None)
+    acc = sum(np.array(res) == np.array(test_label)) / len(res)
+    print('{} : {}'.format(idx, acc))
+    print('over!')
+    
+def init_net(cfg):
+
+    net = cbam_EfficientNet(cbam=cfg.cbam).from_pretrained('efficientnet-b4',weights_path=cfg.pre_model,num_classes=cfg.num_classes)
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    if torch.cuda.device_count() > 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        net = nn.DataParallel(net) 
         
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-if torch.cuda.device_count() > 1:
-    print("Let's use", torch.cuda.device_count(), "GPUs!")
-    net = nn.DataParallel(net)
+    net = net.to(device)
+    
+    return net
 
 
-if not os.path.exists(config.outdir):
-    os.mkdir(config.outdir)
-
-mean, std = calc_mean_std() # 会自动打印，由你决定改不改
-
-net = net.to(device)
-dataloaders_dict, cls2id = get_debug_loader(config.root)
-
-criterion = LabelSmoothSoftmaxCE() if config.label_smooth else nn.CrossEntropyLoss().to(device)
-# optimizer = optim.Adam(net.parameters(), lr=config.LR, betas=(0.9, 0.999), eps=1e-9)
-optimizer = Ranger(net.parameters(), lr=config.LR)
-scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True)
-# scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=Config.milestone, gamma=0.1)
-
-def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
+def train(net, criterion, optimizer, scheduler, dataloaders_dict, cfg):
 
     val_accs = [0]
     train_losses = []
     best_acc = 0  
     bad_data = []
 
-    for epoch in range(config.epochs):
+    for epoch in range(cfg.epochs):
 
         net.train()
         epoch_loss = 0.0
@@ -68,7 +74,7 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
         batchs = len(dataloaders_dict['train'])
         
         with tqdm(total=batchs) as pbar:
-            pbar.set_description(f"Train Epoch {epoch + 1} / {config.epochs}")
+            pbar.set_description(f"Train Epoch {epoch + 1} / {cfg.epochs}")
 
             for batch_idx, data in enumerate(dataloaders_dict['train'], 0):
 
@@ -103,7 +109,7 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
             for data in dataloaders_dict['val']:
                 net.eval()
                 
-                if debug:
+                if cfg.debug:
                     images, labels, paths = data
                 else:
                     images, labels, _ = data
@@ -114,7 +120,7 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
                 
                 total += labels.size(0)
                 correct += (predicted == labels).cpu().sum()
-                if debug: # 如果训练效果不佳可以返回每个epoch里面错误的数据
+                if cfg.debug: # 如果训练效果不佳可以返回每个epoch里面错误的数据
                     bad_data_one_epoch.append([paths[predicted == labels],labels[predicted == labels]])
             
             bad_data.append(bad_data_one_epoch)    
@@ -126,16 +132,46 @@ def train(criterion,optimizer,scheduler,LR=config.LR,debug=False):
 
             if acc > max(val_accs):
                 print("\tsaving best model so far")
-                torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
+                torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (cfg.out_dir, epoch + 1,acc))
 
             val_accs.append(acc)
         
-
-    if not os.path.exists(config.outdir):
-        os.mkdir(config.outdir)
-    torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
-    if debug:
+    torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (cfg.out_dir, epoch + 1,acc))
+    if cfg.debug:
         return bad_data # [[path&class],[],[],[]]
 
 
-train(criterion,optimizer,scheduler)
+
+if __name__ == '__main__':
+    
+    torch.manual_seed(123)            # 为CPU设置随机种子
+    torch.cuda.manual_seed(123)       # 为当前GPU设置随机种子
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+    if not os.path.exists(cfg.out_dir):
+        os.mkdir(cfg.out_dir)
+        
+    if cfg.mean_std:
+        mean, std = calc_mean_std() # 会自动打印，由你决定改不改
+
+    criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
+    optimizer = Ranger(net.parameters(), lr=cfg.lr) # optim.Adam()
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
+    
+    
+    if cfg.bagging:
+        paths, labels, _ =  get_lists(root,)
+        test_dict = {'paths':paths['test'], 'labels':labels['test']}
+        for idx in range(5):
+            net = init_net(cfg)
+            dataloaders_dict, cls2id = get_debug_loader(cfg.root, idx)
+            train(net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
+            test(net, test_dict, idx)
+            del net
+
+    else:
+        net = init_net(cfg)
+        dataloaders_dict, cls2id = get_debug_loader(cfg.root)
+        train(net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
+            

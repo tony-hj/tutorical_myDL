@@ -254,7 +254,7 @@ class cbam_EfficientNet(nn.Module):
 
     """
 
-    def __init__(self, blocks_args=None, global_params=None):
+    def __init__(self, blocks_args=None, global_params=None,cbam=1):
         super().__init__()
         assert isinstance(blocks_args, list), 'blocks_args should be a list'
         assert len(blocks_args) > 0, 'block args must be greater than 0'
@@ -273,10 +273,11 @@ class cbam_EfficientNet(nn.Module):
         out_channels = round_filters(32, self._global_params)  # number of output channels
         self._conv_stem = Conv2d(in_channels, out_channels, kernel_size=3, stride=2, bias=False)
         self._bn0 = nn.BatchNorm2d(num_features=out_channels, momentum=bn_mom, eps=bn_eps)
-        
-        self.ca1 = ChannelAttention(out_channels)
-        self.sa1 = SpatialAttention()
-        # self.sge = SpatialGroupEnhance(out_channels)
+        if cbam >= 1:
+            self.ca1 = ChannelAttention(out_channels)
+            self.sa1 = SpatialAttention()
+            if cbam >= 2:
+                self.sge = SpatialGroupEnhance(out_channels)
 
         # Build blocks
         self._blocks = nn.ModuleList([])
@@ -302,8 +303,9 @@ class cbam_EfficientNet(nn.Module):
         self._conv_head = Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
         self._bn1 = nn.BatchNorm2d(num_features=out_channels, momentum=bn_mom, eps=bn_eps)
         
-        # self.ca2 = ChannelAttention(out_channels)
-        # self.sa2 = SpatialAttention()
+        if cbam >= 2:
+            self.ca2 = ChannelAttention(out_channels)
+            self.sa2 = SpatialAttention()
 
 
         # Final linear layer
@@ -324,10 +326,11 @@ class cbam_EfficientNet(nn.Module):
 
         # Stem
         x = self._swish(self._bn0(self._conv_stem(inputs)))
-        
-        x = self.ca1(x) * x
-        x = self.sa1(x) * x
-        # x = self.sge(x)
+        if cbam >= 1:
+            x = self.ca1(x) * x
+            x = self.sa1(x) * x
+            if cbam >= 2:
+                x = self.sge(x)
 
         # Blocks
         for idx, block in enumerate(self._blocks):
@@ -338,9 +341,9 @@ class cbam_EfficientNet(nn.Module):
 
         # Head
         x = self._swish(self._bn1(self._conv_head(x)))
-        
-        # x = self.ca2(x) * x
-        # x = self.sa2(x) * x
+        if cbam >= 2:
+            x = self.ca2(x) * x
+            x = self.sa2(x) * x
 
         return x
 
@@ -364,9 +367,9 @@ class cbam_EfficientNet(nn.Module):
         return cls(blocks_args, global_params)
 
     @classmethod
-    def from_pretrained(cls, model_name, advprop=False, num_classes=1000, in_channels=3):
+    def from_pretrained(cls, model_name, weights_path=None, advprop=False, num_classes=1000, in_channels=3):
         model = cls.from_name(model_name, override_params={'num_classes': num_classes})
-        load_pretrained_weights(model, model_name, load_fc=(num_classes == 1000), advprop=advprop)
+        load_pretrained_weights(model, model_name, weights_path, advprop=advprop)
         if in_channels != 3:
             Conv2d = get_same_padding_conv2d(image_size = model._global_params.image_size)
             out_channels = round_filters(32, model._global_params)

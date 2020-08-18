@@ -78,15 +78,6 @@ class MBConvBlock(nn.Module):
         self._swish = MemoryEfficientSwish()
 
     def forward(self, inputs, drop_connect_rate=None):
-        """MBConvBlock's forward function.
-
-        Args:
-            inputs (tensor): Input tensor.
-            drop_connect_rate (bool): Drop connect rate (float, between 0 and 1).
-
-        Returns:
-            Output of this block after processing.
-        """
 
         # Expansion and Depthwise Convolution
         x = inputs
@@ -319,7 +310,7 @@ class EfficientNet(nn.Module):
             A pretrained efficientnet model.
         """
         model = cls.from_name(model_name, num_classes = num_classes, **override_params)
-        load_pretrained_weights(model, model_name, weights_path=weights_path, load_fc=(num_classes == 1000), advprop=advprop)
+        load_pretrained_weights(model, model_name, weights_path=weights_path, advprop=advprop)
         model._change_in_channels(in_channels)
         return model
 

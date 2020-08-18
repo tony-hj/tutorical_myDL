@@ -52,9 +52,9 @@ class test_dataset_tta(Dataset):
         
         
 
-def get_debug_loader(root):    #  得到的dataloader 能够返回路径
+def get_debug_loader(root,idx):    #  得到的dataloader 能够返回路径
     
-    paths_all,labels,cls2id = get_lists(root)
+    paths_all,labels,cls2id = get_lists(root,idx)
     
     
     train_loader = DataLoader_pre(MYDataset(paths_all['train'],labels['train'],config.train_transform), 
@@ -66,8 +66,13 @@ def get_debug_loader(root):    #  得到的dataloader 能够返回路径
                                         batch_size=config.batch_size, 
                                         shuffle=False, 
                                         pin_memory=True)
-    
-    dataloaders_dict = {'train':train_loader,'val':val_loader}
+                                        
+    test_loader = DataLoader_pre(MYDataset(paths_all['test'],labels['test'],config.test_transform), # labels['test']可以用0代替
+                                        batch_size=config.batch_size, 
+                                        shuffle=False, 
+                                        pin_memory=True)
+                                        
+    dataloaders_dict = {'train':train_loader,'val':val_loader,'test':test_loader}
     
     return dataloaders_dict,cls2id
     
