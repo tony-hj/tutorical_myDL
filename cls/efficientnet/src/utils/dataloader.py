@@ -52,7 +52,7 @@ class test_dataset_tta(Dataset):
         
         
 
-def get_debug_loader(root,idx):    #  得到的dataloader 能够返回路径
+def get_debug_loader(root,idx=-1):    #  得到的dataloader 能够返回路径
     
     paths_all,labels,cls2id = get_lists(root,idx)
     

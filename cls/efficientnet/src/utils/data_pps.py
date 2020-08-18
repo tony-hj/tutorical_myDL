@@ -50,11 +50,11 @@ def get_lists(root,idx=-1):# mydict指定***.txt的地址, idx < 5
         label['val'] = labels2train[split:]
         label['test'] = labels4test
     else :
-        path['train'] = paths2train[:split_n[idx]]+paths2train[split_n[idx+1]:]
+        path['train'] = paths2train[:split_n[idx]] + paths2train[split_n[idx+1]:]
         path['val'] = paths2train[split_n[idx]:split_n[idx+1]]
         path['test'] = paths4test
 
-        label['train'] = labels2train[:split_n[idx]]+paths2train[split_n[idx+1]:]
+        label['train'] = labels2train[:split_n[idx]] + labels2train[split_n[idx+1]:]
         label['val'] = labels2train[split_n[idx]:split_n[idx+1]]
         label['test'] = labels4test
         

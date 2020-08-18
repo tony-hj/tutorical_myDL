@@ -260,6 +260,7 @@ class cbam_EfficientNet(nn.Module):
         assert len(blocks_args) > 0, 'block args must be greater than 0'
         self._global_params = global_params
         self._blocks_args = blocks_args
+        self.cbam = cbam
 
         # Get static or dynamic convolution depending on image size
         Conv2d = get_same_padding_conv2d(image_size=global_params.image_size)
@@ -273,10 +274,10 @@ class cbam_EfficientNet(nn.Module):
         out_channels = round_filters(32, self._global_params)  # number of output channels
         self._conv_stem = Conv2d(in_channels, out_channels, kernel_size=3, stride=2, bias=False)
         self._bn0 = nn.BatchNorm2d(num_features=out_channels, momentum=bn_mom, eps=bn_eps)
-        if cbam >= 1:
+        if self.cbam >= 1:
             self.ca1 = ChannelAttention(out_channels)
             self.sa1 = SpatialAttention()
-            if cbam >= 2:
+            if self.cbam >= 2:
                 self.sge = SpatialGroupEnhance(out_channels)
 
         # Build blocks
@@ -303,7 +304,7 @@ class cbam_EfficientNet(nn.Module):
         self._conv_head = Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
         self._bn1 = nn.BatchNorm2d(num_features=out_channels, momentum=bn_mom, eps=bn_eps)
         
-        if cbam >= 2:
+        if self.cbam >= 2:
             self.ca2 = ChannelAttention(out_channels)
             self.sa2 = SpatialAttention()
 
@@ -326,10 +327,10 @@ class cbam_EfficientNet(nn.Module):
 
         # Stem
         x = self._swish(self._bn0(self._conv_stem(inputs)))
-        if cbam >= 1:
+        if self.cbam >= 1:
             x = self.ca1(x) * x
             x = self.sa1(x) * x
-            if cbam >= 2:
+            if self.cbam >= 2:
                 x = self.sge(x)
 
         # Blocks
@@ -341,7 +342,7 @@ class cbam_EfficientNet(nn.Module):
 
         # Head
         x = self._swish(self._bn1(self._conv_head(x)))
-        if cbam >= 2:
+        if self.cbam >= 2:
             x = self.ca2(x) * x
             x = self.sa2(x) * x
 
@@ -361,14 +362,14 @@ class cbam_EfficientNet(nn.Module):
         return x
 
     @classmethod
-    def from_name(cls, model_name, override_params=None):
+    def from_name(cls, model_name, override_params=None, cbam=1):
         cls._check_model_name_is_valid(model_name)
         blocks_args, global_params = get_model_params(model_name, override_params)
-        return cls(blocks_args, global_params)
+        return cls(blocks_args, global_params, cbam)
 
     @classmethod
-    def from_pretrained(cls, model_name, weights_path=None, advprop=False, num_classes=1000, in_channels=3):
-        model = cls.from_name(model_name, override_params={'num_classes': num_classes})
+    def from_pretrained(cls, model_name, weights_path=None, advprop=False, num_classes=1000, in_channels=3, cbam=1):
+        model = cls.from_name(model_name, override_params={'num_classes': num_classes}, cbam=cbam)
         load_pretrained_weights(model, model_name, weights_path, advprop=advprop)
         if in_channels != 3:
             Conv2d = get_same_padding_conv2d(image_size = model._global_params.image_size)

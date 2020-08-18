@@ -45,9 +45,7 @@ def test(net, test_dict, idx):
     
 def init_net(cfg):
 
-    net = cbam_EfficientNet(cbam=cfg.cbam).from_pretrained('efficientnet-b4',weights_path=cfg.pre_model,num_classes=cfg.num_classes)
-
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    net = cbam_EfficientNet.from_pretrained('efficientnet-b4',weights_path=cfg.pre_model,num_classes=cfg.num_classes,cbam=cfg.cbam)
 
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -148,21 +146,21 @@ if __name__ == '__main__':
     torch.cuda.manual_seed(123)       # 为当前GPU设置随机种子
     os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     ImageFile.LOAD_TRUNCATED_IMAGES = True
-
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    
     if not os.path.exists(cfg.out_dir):
         os.mkdir(cfg.out_dir)
         
     if cfg.mean_std:
         mean, std = calc_mean_std() # 会自动打印，由你决定改不改
 
-    criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
-    optimizer = Ranger(net.parameters(), lr=cfg.lr) # optim.Adam()
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
-    
     
     if cfg.bagging:
         paths, labels, _ =  get_lists(root,)
         test_dict = {'paths':paths['test'], 'labels':labels['test']}
+        criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
+        optimizer = Ranger(net.parameters(), lr=cfg.lr) # optim.Adam()
+        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
         for idx in range(5):
             net = init_net(cfg)
             dataloaders_dict, cls2id = get_debug_loader(cfg.root, idx)
@@ -172,6 +170,9 @@ if __name__ == '__main__':
 
     else:
         net = init_net(cfg)
+        criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
+        optimizer = Ranger(net.parameters(), lr=cfg.lr) # optim.Adam()
+        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
         dataloaders_dict, cls2id = get_debug_loader(cfg.root)
         train(net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
             
