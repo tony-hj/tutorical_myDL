@@ -15,7 +15,8 @@ from utils.data_pps import get_lists
 
 import os
 import argparse
-from PIL import ImageFile
+import pandas as pd
+from PIL import ImageFile, Image
 from tqdm import tqdm
 import numpy as np
 from mean_std import calc_mean_std
@@ -23,15 +24,17 @@ from torch.utils.model_zoo import load_url
 
 def test(net, test_dict, idx):
     
-    ids = list(test_path)
+    
     test_path = test_dict['paths']
     test_label = test_dict['labels']
+    
+    ids = [i.split('/')[-1][:-4] for i in test_dict['paths']]
     res = []
     
     for i in range(len(test_path)):
-        filename = test_path[i] + '.jpg'
-        image = Image.open(os.path.join(root,filename)).convert('RGB')
-        input = test_transform(image).unsqueeze(0).to(device)
+        filename = test_path[i]
+        image = Image.open(os.path.join(cfg.root,filename)).convert('RGB')
+        input = cfg.test_transform(image).unsqueeze(0).to(device)
         output = net(input)
         label = int(output.argmax())
         res.append(label)
@@ -40,7 +43,7 @@ def test(net, test_dict, idx):
     df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
     df.to_csv('id_{}.csv'.format(idx),index=None)
     acc = sum(np.array(res) == np.array(test_label)) / len(res)
-    print('{} : {}'.format(idx, acc))
+    print('bagging {} : {}'.format(idx, acc))
     print('over!')
     
 def init_net(cfg):
@@ -139,6 +142,34 @@ def train(net, criterion, optimizer, scheduler, dataloaders_dict, cfg):
         return bad_data # [[path&class],[],[],[]]
 
 
+def concat_res(test_dict):
+
+    def get_common(res):
+        x = dict((a,res.count(a)) for a in res)
+        cls = [k for k,v in x.items() if max(x.values())==v][0]
+        return cls
+        
+    paths = [i.split('/')[-1][:-4] for i in test_dict['paths']]
+    labels = test_dict['labels']
+    
+    res_dict = {'FileID':paths, 'SpeciesID':[[] for i in range(len(paths))]}
+    for dir in ['id_0.csv','id_1.csv','id_2.csv','id_3.csv','id_4.csv']:
+        df = pd.read_csv(dir)
+        for i in range(len(df)):
+            key = df.loc[i,:]['FileID']
+            value = df.loc[i,:]['SpeciesID']
+            res_dict['SpeciesID'][i].append(value)
+            
+    for i in range(len(df)):
+        res_dict['SpeciesID'][i] = get_common(res_dict['SpeciesID'][i])
+        
+    final_res = [[res_dict['FileID'][i], res_dict['SpeciesID'][i]] for i in range(len(paths))]
+    df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
+    df.to_csv('bagging_res.csv',index=None)
+    acc = sum(np.array(res_dict['SpeciesID']) == np.array(labels)) / len(paths)
+    print('final bagging acc is ',acc) 
+    
+
 
 if __name__ == '__main__':
     
@@ -156,17 +187,21 @@ if __name__ == '__main__':
 
     
     if cfg.bagging:
-        paths, labels, _ =  get_lists(root,)
+        paths, labels, _ =  get_lists(cfg.root)
         test_dict = {'paths':paths['test'], 'labels':labels['test']}
-        criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
-        optimizer = Ranger(net.parameters(), lr=cfg.lr) # optim.Adam()
-        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
+
         for idx in range(5):
+            print('bagging iter {}'.format(idx))
             net = init_net(cfg)
+            criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
+            optimizer = Ranger(net.parameters(), lr=cfg.lr) # optim.Adam()
+            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
             dataloaders_dict, cls2id = get_debug_loader(cfg.root, idx)
             train(net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
             test(net, test_dict, idx)
             del net
+            
+        concat_res(test_dict)
 
     else:
         net = init_net(cfg)
