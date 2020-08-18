@@ -75,23 +75,7 @@ mean = np.array([0.4914, 0.4822, 0.4465])
 std = np.array([0.2470, 0.2435, 0.2616])
 
 
-test_transform = transforms.Compose([
-    torchvision.transforms.Resize(input_size),
-    torchvision.transforms.CenterCrop(input_size),
-    torchvision.transforms.ToTensor(),
-    torchvision.transforms.Normalize(mean, std),
-])
 
-train_transform = transforms.Compose([
-    torchvision.transforms.Resize(input_size),# 要不要加随即裁剪呢
-    torchvision.transforms.CenterCrop(input_size),
-    # Resize_propotion(input_size),
-    torchvision.transforms.RandomAffine(degrees=0, translate=(0.05, 0.05)),
-    torchvision.transforms.RandomHorizontalFlip(),
-    # AutoAugment(dataset='IMAGENET'),
-    torchvision.transforms.ToTensor(),
-    torchvision.transforms.Normalize(mean, std),
-])
 
 batch_size = 20
 num_workers = 4
@@ -117,5 +101,21 @@ train_dist = train_df.groupby('SpeciesID').count()
 mean = len(train_df) / 20
 sample_weight = {i : mean/int(train_dist.loc[i,:]) for i in range(num_classes)}
 
+test_transform = transforms.Compose([
+    torchvision.transforms.Resize(input_size),
+    torchvision.transforms.CenterCrop(input_size),
+    torchvision.transforms.ToTensor(),
+    torchvision.transforms.Normalize(mean, std),
+])
 
+train_transform = transforms.Compose([
+    torchvision.transforms.Resize(input_size),# 要不要加随即裁剪呢
+    torchvision.transforms.CenterCrop(input_size),
+    # Resize_propotion(input_size),
+    torchvision.transforms.RandomAffine(degrees=0, translate=(0.05, 0.05)),
+    torchvision.transforms.RandomHorizontalFlip(),
+    # AutoAugment(dataset='IMAGENET'),
+    torchvision.transforms.ToTensor(),
+    torchvision.transforms.Normalize(mean, std),
+])
 
