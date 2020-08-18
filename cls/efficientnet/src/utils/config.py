@@ -98,8 +98,8 @@ out_dir = './' # 路径后面不能有斜杠   '%s/net_%03d_%.3f.pth' % (config.
 use_sample_weight = True
 train_df = pd.read_csv('/content/dataset/training.csv')
 train_dist = train_df.groupby('SpeciesID').count()
-mean = len(train_df) / 20
-sample_weight = {i : mean/int(train_dist.loc[i,:]) for i in range(num_classes)}
+avg_num = len(train_df) / 20
+sample_weight = {i : avg_num/int(train_dist.loc[i,:]) for i in range(num_classes)}
 
 test_transform = transforms.Compose([
     torchvision.transforms.Resize(input_size),
