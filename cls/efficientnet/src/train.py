@@ -14,16 +14,36 @@ from utils.ranger import Ranger
 from utils.data_pps import get_lists
 
 import os
+import seaborn as sns
 import argparse
 import pandas as pd
+import matplotlib.pyplot as plt
 from PIL import ImageFile, Image
 from tqdm import tqdm
 import numpy as np
 from mean_std import calc_mean_std
 from torch.utils.model_zoo import load_url
 
+
+def confusion_matrix(a,idx=-1):
+    # 删除准确率为1的行/列
+    row=0
+    while row < len(a):
+        if a[row,row] == sum(a[row]) and a[row,row] == sum(a[:,row]):
+            a = np.delete(a,row,1)
+            a = np.delete(a,row,0)
+            row -= 1
+        row += 1
+    plt.clf()
+    sns.heatmap(a,annot=True,cmap='YlGnBu',annot_kws={'size':10,'weight':'bold'})
+    plt.tick_params(labelsize=10)
+    plt.ylabel('prediction',fontsize=15)
+    plt.xlabel('ground-truth',fontsize=15)
+    fig = plt.gcf()
+    fig.savefig("conf_matrix_{}.png".format(idx))
+
+
 def test(net, test_dict, idx):
-    
     
     test_path = test_dict['paths']
     test_label = test_dict['labels']
@@ -38,14 +58,24 @@ def test(net, test_dict, idx):
         output = net(input)
         label = int(output.argmax())
         res.append(label)
+    
+    if cfg.confusion_matrix:
+        conf_matrix = np.zeros((cfg.num_classes,cfg.num_classes))
+        for p, t in zip(res, test_label):
+            conf_matrix[p,t] += 1
+            
+        confusion_matrix(conf_matrix,idx)
+        
 
+    
     final_res = [[ids[i], res[i]] for i in range(len(ids))]
     df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
     df.to_csv('id_{}.csv'.format(idx),index=None)
     acc = sum(np.array(res) == np.array(test_label)) / len(res)
     print('bagging {} : {}'.format(idx, acc))
     print('over!')
-    
+   
+   
 def init_net(cfg):
 
     net = cbam_EfficientNet.from_pretrained('efficientnet-b4',weights_path=cfg.pre_model,num_classes=cfg.num_classes,cbam=cfg.cbam)
@@ -58,6 +88,41 @@ def init_net(cfg):
     
     return net
 
+
+def concat_res(test_dict):
+
+    def get_common(res):
+        x = dict((a,res.count(a)) for a in res)
+        cls = [k for k,v in x.items() if max(x.values())==v][0]
+        return cls
+        
+    paths = [i.split('/')[-1][:-4] for i in test_dict['paths']]
+    labels = test_dict['labels']
+    
+    res_dict = {'FileID':paths, 'SpeciesID':[[] for i in range(len(paths))]}
+    for dir in ['id_0.csv','id_1.csv','id_2.csv','id_3.csv','id_4.csv']:
+        df = pd.read_csv(dir)
+        for i in range(len(df)):
+            key = df.loc[i,:]['FileID']
+            value = df.loc[i,:]['SpeciesID']
+            res_dict['SpeciesID'][i].append(value)
+            
+    for i in range(len(df)):
+        res_dict['SpeciesID'][i] = get_common(res_dict['SpeciesID'][i])
+        
+    if cfg.confusion_matrix:
+        conf_matrix = np.zeros((cfg.num_classes,cfg.num_classes))
+        for p, t in zip(res_dict['SpeciesID'], labels):
+            conf_matrix[p,t] += 1
+            
+        confusion_matrix(conf_matrix)    
+        
+    final_res = [[res_dict['FileID'][i], res_dict['SpeciesID'][i]] for i in range(len(paths))]
+    df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
+    df.to_csv('bagging_res.csv',index=None)
+    acc = sum(np.array(res_dict['SpeciesID']) == np.array(labels)) / len(paths)
+    print('final bagging acc is ',acc) 
+    
 
 def train(net, criterion, optimizer, scheduler, dataloaders_dict, cfg):
 
@@ -129,46 +194,18 @@ def train(net, criterion, optimizer, scheduler, dataloaders_dict, cfg):
             
             scheduler.step(acc)
             
-            print('\t测试分类准确率为：%.3f%%' % acc)
-
-            if acc > max(val_accs):
-                print("\tsaving best model so far")
-                torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (cfg.out_dir, epoch + 1,acc))
+            print('\t验证集分类准确率为：%.3f%%' % acc)
+            
+            if cfg.save:
+                if acc > max(val_accs):
+                    print("\tsaving best model so far")
+                    torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (cfg.out_dir, epoch + 1,acc))
 
             val_accs.append(acc)
-        
-    torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (cfg.out_dir, epoch + 1,acc))
+            
     if cfg.debug:
         return bad_data # [[path&class],[],[],[]]
 
-
-def concat_res(test_dict):
-
-    def get_common(res):
-        x = dict((a,res.count(a)) for a in res)
-        cls = [k for k,v in x.items() if max(x.values())==v][0]
-        return cls
-        
-    paths = [i.split('/')[-1][:-4] for i in test_dict['paths']]
-    labels = test_dict['labels']
-    
-    res_dict = {'FileID':paths, 'SpeciesID':[[] for i in range(len(paths))]}
-    for dir in ['id_0.csv','id_1.csv','id_2.csv','id_3.csv','id_4.csv']:
-        df = pd.read_csv(dir)
-        for i in range(len(df)):
-            key = df.loc[i,:]['FileID']
-            value = df.loc[i,:]['SpeciesID']
-            res_dict['SpeciesID'][i].append(value)
-            
-    for i in range(len(df)):
-        res_dict['SpeciesID'][i] = get_common(res_dict['SpeciesID'][i])
-        
-    final_res = [[res_dict['FileID'][i], res_dict['SpeciesID'][i]] for i in range(len(paths))]
-    df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
-    df.to_csv('bagging_res.csv',index=None)
-    acc = sum(np.array(res_dict['SpeciesID']) == np.array(labels)) / len(paths)
-    print('final bagging acc is ',acc) 
-    
 
 
 if __name__ == '__main__':
@@ -210,4 +247,5 @@ if __name__ == '__main__':
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
         dataloaders_dict, cls2id = get_debug_loader(cfg.root)
         train(net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
-            
+    
+    

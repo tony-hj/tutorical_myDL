@@ -84,9 +84,11 @@ lr = 1e-3
 cbam = 0
 version = 4
 pre_model = None
-bagging = False
+bagging = True
 mean_std = False
 debug = False
+confusion_matrix=True
+save=False
 # 下面的参数一般要改
 input_size = [224,240,260,300,380,456,528,600][version]
 num_classes = 20
