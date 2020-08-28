@@ -26,9 +26,8 @@ from torch.utils.model_zoo import load_url
 
 
 def confusion_matrix(a,idx=-1,tta=False):
-    # 画混淆矩阵
-    
-    row = 0 # 删除准确率为1的行/列
+    # 删除准确率为1的行/列
+    row=0
     while row < len(a):
         if a[row,row] == sum(a[row]) and a[row,row] == sum(a[:,row]):
             a = np.delete(a,row,1)
@@ -45,7 +44,6 @@ def confusion_matrix(a,idx=-1,tta=False):
 
 
 def test(net, idx, tta=False, opt=False):
-    # 有测试集时对网络进行测试
     paths, labels, _ =  get_lists(cfg.root,opt=opt)
     test_dict = {'paths':paths['test'], 'labels':labels['test']}
     test_path = test_dict['paths']
@@ -107,49 +105,55 @@ def init_net(cfg,v=4):
     return net
 
 
-def concat_res(tta=False,opt=False):
-    # 通过投票的方式合并bagging的结果文件
+def concat_res(net_cfg):
+
     def get_common(res):
-        # 得到众数
         x = dict((a,res.count(a)) for a in res)
         cls = [k for k,v in x.items() if max(x.values())==v][0]
         return cls
         
-    paths, labels, _ =  get_lists(cfg.root,opt)
+    paths, labels, _ =  get_lists(cfg.root, net_cfg['opt'])
     test_dict = {'paths':paths['test'], 'labels':labels['test']}
     
     paths = [i.split('/')[-1][:-4] for i in test_dict['paths']]
     labels = test_dict['labels']
     
     res_dict = {'FileID':paths, 'SpeciesID':[[] for i in range(len(paths))]}
-    for dir in ['tta_id_0.csv','tta_id_1.csv','tta_id_2.csv','tta_id_3.csv','tta_id_4.csv'] if tta else ['id_0.csv','id_1.csv','id_2.csv','id_3.csv','id_4.csv']:
-        df = pd.read_csv(dir)
+    
+    tta_file_list = ['tta_id_{}.csv'.format(i) for i in range(5)]
+    file_list = ['id_{}.csv'.format(i) for i in range(5)]
+    acc = []
+    
+    for ls in [file_list, tta_file_list] if net_cfg['tta'] else [file_list]:
+        for dir in ['id_{}.csv'.format(i) for i in range(5)]:
+            df = pd.read_csv(dir)
+            for i in range(len(df)):
+                key = df.loc[i,:]['FileID']
+                value = df.loc[i,:]['SpeciesID']
+                res_dict['SpeciesID'][i].append(value)
+
         for i in range(len(df)):
-            key = df.loc[i,:]['FileID']
-            value = df.loc[i,:]['SpeciesID']
-            res_dict['SpeciesID'][i].append(value)
+            res_dict['SpeciesID'][i] = get_common(res_dict['SpeciesID'][i])
             
-    for i in range(len(df)):
-        res_dict['SpeciesID'][i] = get_common(res_dict['SpeciesID'][i])
-        
-    if cfg.confusion_matrix:
-        conf_matrix = np.zeros((cfg.num_classes,cfg.num_classes))
-        for p, t in zip(res_dict['SpeciesID'], labels):
-            conf_matrix[p,t] += 1
+        if cfg.confusion_matrix:
+            conf_matrix = np.zeros((cfg.num_classes,cfg.num_classes))
+            for p, t in zip(res_dict['SpeciesID'], labels):
+                conf_matrix[p,t] += 1
+                
+            confusion_matrix(conf_matrix)    
             
-        confusion_matrix(conf_matrix)    
+        final_res = [[res_dict['FileID'][i], res_dict['SpeciesID'][i]] for i in range(len(paths))]
+        df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
+        df.to_csv('tta_bagging_res.csv' if net_cfg['tta'] else 'bagging_res.csv',index=None)
+        accuacy = sum(np.array(res_dict['SpeciesID']) == np.array(labels)) / len(paths)
+        acc.append(accuacy)
         
-    final_res = [[res_dict['FileID'][i], res_dict['SpeciesID'][i]] for i in range(len(paths))]
-    df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
-    df.to_csv('tta_bagging_res.csv' if tta else 'bagging_res.csv',index=None)
-    acc = sum(np.array(res_dict['SpeciesID']) == np.array(labels)) / len(paths)
-    if tta:
+    print('final bagging acc is ',acc[0])    
+    if net_cfg['tta']:
         print('final tta bagging acc is ',acc)
-    else:
-        print('final bagging acc is ',acc)
+        
     
 def cat_res(path0, path20):
-    # 两个结果文件的合并
     df0 = pd.read_csv(path0)
     df20 = pd.read_csv(path20)
     index = []
@@ -162,19 +166,39 @@ def cat_res(path0, path20):
     df20.to_csv('final_res.csv')
   
 def get_acc(path):
-    # 有 结果csv文件 和 测试集csv文件 计算准确率
     df_test = pd.read_csv('/content/dataset/test.csv')
     df = pd.read_csv(path)
     acc = sum(np.array(df['SpeciesID']) == np.array(df_test['SpeciesID'])) / len(df)
-    
-def train(net, criterion, optimizer, scheduler, dataloaders_dict, cfg):
+
+def baseline(net_cfg):
+    net = init_net(cfg)
+    criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
+    optimizer = Ranger(net.parameters(), lr=cfg.lr) # optim.Adam()
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
+    dataloaders_dict, cls2id = get_debug_loader(cfg.root, idx, opt=baseline['opt'])
+    train(net,criterion,optimizer,scheduler,dataloaders_dict,net_cfg)
+    if net_cfg['test']:
+        test(net, idx)
+    if net_cfg['tta']:
+        test(net, idx, cfg.tta)
+    if net_cfg['del']:
+        del net,criterion,scheduler,dataloaders_dict,cls2id
+
+def bagging(net_cfg):
+    for idx in range(5):
+        print('bagging iter {}'.format(idx))
+        baseline(net_cfg)
+    concat_res(net_cfg)
+
+
+def train(net, criterion, optimizer, scheduler, dataloaders_dict, net_cfg):
 
     val_accs = [0]
     train_losses = []
     best_acc = 0  
     bad_data = []
 
-    for epoch in range(cfg.epochs):
+    for epoch in range(net_cfg['epochs']):
 
         net.train()
         epoch_loss = 0.0
@@ -183,7 +207,7 @@ def train(net, criterion, optimizer, scheduler, dataloaders_dict, cfg):
         batchs = len(dataloaders_dict['train'])
         
         with tqdm(total=batchs) as pbar:
-            pbar.set_description(f"Train Epoch {epoch + 1} / {cfg.epochs}")
+            pbar.set_description(f"Train Epoch {epoch + 1} / {net_cfg['epochs']}")
 
             for batch_idx, data in enumerate(dataloaders_dict['train'], 0):
 
@@ -218,7 +242,7 @@ def train(net, criterion, optimizer, scheduler, dataloaders_dict, cfg):
             for data in dataloaders_dict['val']:
                 net.eval()
                 
-                if cfg.debug:
+                if net_cfg['debug']:
                     images, labels, paths = data
                 else:
                     images, labels, _ = data
@@ -229,7 +253,7 @@ def train(net, criterion, optimizer, scheduler, dataloaders_dict, cfg):
                 
                 total += labels.size(0)
                 correct += (predicted == labels).cpu().sum()
-                if cfg.debug: # 如果训练效果不佳可以返回每个epoch里面错误的数据
+                if net_cfg['debug']: # 如果训练效果不佳可以返回每个epoch里面错误的数据
                     bad_data_one_epoch.append([paths[predicted == labels],labels[predicted == labels]])
             
             bad_data.append(bad_data_one_epoch)    
@@ -239,7 +263,7 @@ def train(net, criterion, optimizer, scheduler, dataloaders_dict, cfg):
             
             print('\t验证集分类准确率为：%.3f%%' % acc)
             
-            if cfg.save:
+            if net_cfg['save']:
                 if acc > max(val_accs):
                     print("\tsaving best model so far")
                     torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (cfg.out_dir, epoch + 1,acc))
@@ -247,10 +271,14 @@ def train(net, criterion, optimizer, scheduler, dataloaders_dict, cfg):
             val_accs.append(acc)
               
             
-    if cfg.debug:
+    if net_cfg['debug']:
         return bad_data # [[path&class],[],[],[]]
 
-
+def tricky_train(net_cfg):
+    if net_cfg['bagging']:
+        bagging(net_cfg)
+    else:
+        baseline(net_cfg)
 
 if __name__ == '__main__':
     
@@ -267,41 +295,28 @@ if __name__ == '__main__':
         mean, std = calc_mean_std() # 会自动打印，由你决定改不改
 
     
-    if cfg.bagging:
 
-        for idx in range(5):
-            print('bagging iter {}'.format(idx))
-            net = init_net(cfg)
-            criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
-            optimizer = Ranger(net.parameters(), lr=cfg.lr) # optim.Adam()
-            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
-            dataloaders_dict, cls2id = get_debug_loader(cfg.root, idx)
-            train(net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
-            test(net, idx)
-            if cfg.tta:
-                test(net, idx, cfg.tta)
-            del net
-            
-        concat_res()
-        concat_res(tta=False)
-
-    else:
-        # net = init_net(cfg)
-        # criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
-        # optimizer = Ranger(net.parameters(), lr=cfg.lr) # optim.Adam()
-        # scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
-        # dataloaders_dict, cls2id = get_debug_loader(cfg.root)
-        # train(net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
-        # test(net, 'full', cfg.tta)
-        # del net, dataloaders_dict, cls2id, criterion, optimizer, scheduler
-        # 训练一个helper_net
-        helper_net = init_net(cfg)
-        criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
-        optimizer = Ranger(helper_net.parameters(), lr=cfg.lr) # optim.Adam()
-        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
-        dataloaders_dict, cls2id = get_debug_loader(cfg.root,opt=True)
-        cfg.epochs = 5
-        train(helper_net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
-        test(helper_net, 'help', cfg.tta, opt=True)
+    helper_net_cfg = {
+        'opt':True,
+        'tta':True,
+        'epochs':30,
+        'test':True,
+        'del':True,
+        'bagging':False,
+        'save':False,
+        'debug':False
+    }
+    main_net_cfg{
+        'opt':True,
+        'tta':True,
+        'epochs':30,
+        'test':True,
+        'del':True,
+        'bagging':False,
+        'save':False,
+        'debug':False
+    }
+    tricky_train(helper_net_cfg)
+    
     
     
