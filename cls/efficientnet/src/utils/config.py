@@ -45,17 +45,12 @@ lr = 1e-3
 cbam = 0
 version = 4
 pre_model = None
-bagging = True
 mean_std = False
-debug = False
 confusion_matrix=True
-save=False
-tta=True
 # 下面的参数一般要改
 input_size = [224,240,260,300,380,456,528,600][version]
 num_classes = 20
 root = '/content/dataset' # 传给data_pps的参数
-epochs = 5
 model_path = None # 预训练模型的位置 默认为None
 out_dir = './' # 路径后面不能有斜杠   '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
 
