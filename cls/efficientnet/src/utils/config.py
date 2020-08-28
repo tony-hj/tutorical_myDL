@@ -7,51 +7,12 @@ from utils.auto_augment import AutoAugment
 import pandas as pd
 
 
-'''
-trans_tta_1 = transforms.Compose([
-    transforms.Resize(input_size),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=mean, std=std)
-])
-trans_tta_2 = transforms.Compose([
-    transforms.Resize(input_size),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=mean, std=std)
-])
-trans_tta_3 = transforms.Compose([
-    transforms.Resize(input_size),
-    transforms.RandomRotation((-25, 25)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=mean, std=std)
-])
-trans_tta_4 = transforms.Compose([
-    transforms.Resize(input_size),
-    transforms.RandomHorizontalFlip(0.25),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=mean, std=std)
-])
-trans_tta_5 = transforms.Compose([
-    transforms.Resize(input_size),
-    transforms.RandomVerticalFlip(0.25),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=mean, std=std)
-])
-trans_tta_6 = transforms.Compose([
-    Resize_propotion(input_size),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=mean, std=std)
-])
-
-tta_trans_list = [trans_tta_1,trans_tta_2,trans_tta_3,trans_tta_4,trans_tta_5,trans_tta_6]
-'''
-
-
 class Resize_propotion(object):
     """
     等比缩放，防止在缩放过程中导致物体长宽比例改变导致识别错误
     """
     def __init__(self,size,interpolation = Image.BILINEAR):
-        self.size = size
+        self.size = (size,size)
         self.interpolation =interpolation
 
     def __call__(self,img):
@@ -70,9 +31,9 @@ class Resize_propotion(object):
         img = img.resize(self.size, self.interpolation)
         return img
 
-# [0.26958571 0.3887648  0.41509606] [0.16806719 0.18439094 0.18346951]
-mean = np.array([0.4914, 0.4822, 0.4465])
-std = np.array([0.2470, 0.2435, 0.2616])
+# [0.26958571,0.3887648,0.41509606] [0.16806719,0.18439094,0.18346951]
+mean = np.array([0.26958571,0.3887648,0.41509606])
+std = np.array([0.16806719,0.18439094,0.18346951])
 
 
 
@@ -89,11 +50,12 @@ mean_std = False
 debug = False
 confusion_matrix=True
 save=False
+tta=True
 # 下面的参数一般要改
 input_size = [224,240,260,300,380,456,528,600][version]
 num_classes = 20
 root = '/content/dataset' # 传给data_pps的参数
-epochs = 1
+epochs = 5
 model_path = None # 预训练模型的位置 默认为None
 out_dir = './' # 路径后面不能有斜杠   '%s/net_%03d_%.3f.pth' % (config.outdir, epoch + 1,acc))
 
@@ -121,3 +83,33 @@ train_transform = transforms.Compose([
     torchvision.transforms.Normalize(mean, std),
 ])
 
+trans_tta_1 = transforms.Compose([
+    transforms.Resize(input_size),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=mean, std=std)
+])
+trans_tta_2 = transforms.Compose([
+    transforms.Resize(input_size),
+    transforms.RandomRotation((-25, 25)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=mean, std=std)
+])
+trans_tta_3 = transforms.Compose([
+    transforms.Resize(input_size),
+    transforms.RandomHorizontalFlip(1),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=mean, std=std)
+])
+trans_tta_4 = transforms.Compose([
+    transforms.Resize(input_size),
+    transforms.RandomVerticalFlip(1),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=mean, std=std)
+])
+trans_tta_5 = transforms.Compose([
+    Resize_propotion(input_size),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=mean, std=std)
+])
+
+tta_trans_list = [trans_tta_1,trans_tta_2,trans_tta_3,trans_tta_4,trans_tta_5]

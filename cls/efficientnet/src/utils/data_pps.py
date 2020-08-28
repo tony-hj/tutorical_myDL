@@ -13,9 +13,13 @@ cls 单词
 id 数字
 '''
 
-def get_lists(root,idx=-1):# mydict指定***.txt的地址, idx < 5
+def get_lists(root,idx=-1,opt=False):# mydict指定***.txt的地址, idx < 5
     
     '''
+    rags:
+    1. idx用于bagging
+    2. opt用于训练辅助分类器（本次有两个类别分不清）
+    
     returns
     1. path 一个字典，分为'train'、'val'，他们分别包含着由绝对路径组成的列表
     2. label ... 由数字标签组成
@@ -27,11 +31,15 @@ def get_lists(root,idx=-1):# mydict指定***.txt的地址, idx < 5
     cls2id = {list(species.ScientificName)[i]:list(species.ID)[i] for i in range(species.shape[0])}
 
     data = pd.read_csv(os.path.join(root,'training.csv'))
+    if opt:
+        data = data[data['SpeciesID'].isin([0,4])]
     data = data.sample(frac=1, random_state=123)
     paths2train = [root+'/data/'+i+'.jpg' for i in list(data['FileID'])]
     labels2train = list(data['SpeciesID'])
 
     anno = pd.read_csv(os.path.join(root,'annotation.csv')) # test.csv文件名和真实标签，用于验证
+    if opt:
+        anno = anno[anno['SpeciesID'].isin([0,4])]
     paths4test = [root+'/data/'+i+'.jpg' for i in list(anno['FileID'])]
     labels4test = list(anno['SpeciesID'])
 

@@ -25,7 +25,7 @@ from mean_std import calc_mean_std
 from torch.utils.model_zoo import load_url
 
 
-def confusion_matrix(a,idx=-1):
+def confusion_matrix(a,idx=-1,tta=False):
     # 删除准确率为1的行/列
     row=0
     while row < len(a):
@@ -40,10 +40,12 @@ def confusion_matrix(a,idx=-1):
     plt.ylabel('prediction',fontsize=15)
     plt.xlabel('ground-truth',fontsize=15)
     fig = plt.gcf()
-    fig.savefig("conf_matrix_{}.png".format(idx))
+    fig.savefig("tta_conf_matrix_{}.png".format(idx) if tta else "conf_matrix_{}.png".format(idx))
 
 
-def test(net, test_dict, idx):
+def test(net, idx, tta=False, opt=False):
+    paths, labels, _ =  get_lists(cfg.root,opt)
+    test_dict = {'paths':paths['test'], 'labels':labels['test']}
     
     test_path = test_dict['paths']
     test_label = test_dict['labels']
@@ -54,9 +56,24 @@ def test(net, test_dict, idx):
     for i in range(len(test_path)):
         filename = test_path[i]
         image = Image.open(os.path.join(cfg.root,filename)).convert('RGB')
-        input = cfg.test_transform(image).unsqueeze(0).to(device)
-        output = net(input)
-        label = int(output.argmax())
+        if tta:
+            images = []
+            for tsfm in cfg.tta_trans_list:
+                images.append(tsfm(image).unsqueeze(0).to(device))
+            output = [net(i) for i in images]
+            label0 = [int(i.argmax()) for i in output]
+
+            b = {i:sum([j==i for j in label0]) for i in set(label0)}
+            a = np.array([i for i in b.values()])
+            label = list(b.keys())[a.argmax()]
+            if len([i for i in a if i == max(a)]) > 1:
+                print('you need get more tta tsfm',label0)
+            del images, output
+
+        else:
+            input = cfg.test_transform(image).unsqueeze(0).to(device)
+            output = net(input)
+            label = int(output.argmax())
         res.append(label)
     
     if cfg.confusion_matrix:
@@ -64,21 +81,21 @@ def test(net, test_dict, idx):
         for p, t in zip(res, test_label):
             conf_matrix[p,t] += 1
             
-        confusion_matrix(conf_matrix,idx)
+        confusion_matrix(conf_matrix,idx,tta)
         
 
     
     final_res = [[ids[i], res[i]] for i in range(len(ids))]
     df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
-    df.to_csv('id_{}.csv'.format(idx),index=None)
+    df.to_csv('tta_id_{}.csv'.format(idx) if tta else 'id_{}.csv'.format(idx),index=None)
     acc = sum(np.array(res) == np.array(test_label)) / len(res)
     print('bagging {} : {}'.format(idx, acc))
     print('over!')
    
    
-def init_net(cfg):
+def init_net(cfg,v=4):
 
-    net = cbam_EfficientNet.from_pretrained('efficientnet-b4',weights_path=cfg.pre_model,num_classes=cfg.num_classes,cbam=cfg.cbam)
+    net = cbam_EfficientNet.from_pretrained('efficientnet-b{}'.format(v),weights_path=cfg.pre_model,num_classes=cfg.num_classes,cbam=cfg.cbam)
 
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -89,18 +106,21 @@ def init_net(cfg):
     return net
 
 
-def concat_res(test_dict):
+def concat_res(tta=False,opt=False):
 
     def get_common(res):
         x = dict((a,res.count(a)) for a in res)
         cls = [k for k,v in x.items() if max(x.values())==v][0]
         return cls
         
+    paths, labels, _ =  get_lists(cfg.root,opt)
+    test_dict = {'paths':paths['test'], 'labels':labels['test']}
+    
     paths = [i.split('/')[-1][:-4] for i in test_dict['paths']]
     labels = test_dict['labels']
     
     res_dict = {'FileID':paths, 'SpeciesID':[[] for i in range(len(paths))]}
-    for dir in ['id_0.csv','id_1.csv','id_2.csv','id_3.csv','id_4.csv']:
+    for dir in ['tta_id_0.csv','tta_id_1.csv','tta_id_2.csv','tta_id_3.csv','tta_id_4.csv'] if tta else ['id_0.csv','id_1.csv','id_2.csv','id_3.csv','id_4.csv']:
         df = pd.read_csv(dir)
         for i in range(len(df)):
             key = df.loc[i,:]['FileID']
@@ -119,11 +139,30 @@ def concat_res(test_dict):
         
     final_res = [[res_dict['FileID'][i], res_dict['SpeciesID'][i]] for i in range(len(paths))]
     df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
-    df.to_csv('bagging_res.csv',index=None)
+    df.to_csv('tta_bagging_res.csv' if tta else 'bagging_res.csv',index=None)
     acc = sum(np.array(res_dict['SpeciesID']) == np.array(labels)) / len(paths)
-    print('final bagging acc is ',acc) 
+    if tta:
+        print('final tta bagging acc is ',acc)
+    else:
+        print('final bagging acc is ',acc)
     
-
+def cat_res(path0, path20):
+    df0 = pd.read_csv(path0)
+    df20 = pd.read_csv(path20)
+    index = []
+    for idx in range(len(df0)):
+        if df0.iloc[idx,1] == 0:
+            index.append(idx)
+    for idx in index:
+        df20.iloc[idx,1] = 0
+        
+    df20.to_csv('final_res.csv')
+  
+def get_acc(path):
+    df_test = pd.read_csv('/content/dataset/test.csv')
+    df = pd.read_csv(path)
+    acc = sum(np.array(df['SpeciesID']) == np.array(df_test['SpeciesID'])) / len(df)
+    
 def train(net, criterion, optimizer, scheduler, dataloaders_dict, cfg):
 
     val_accs = [0]
@@ -202,6 +241,7 @@ def train(net, criterion, optimizer, scheduler, dataloaders_dict, cfg):
                     torch.save(net.state_dict(), '%s/net_%03d_%.3f.pth' % (cfg.out_dir, epoch + 1,acc))
 
             val_accs.append(acc)
+              
             
     if cfg.debug:
         return bad_data # [[path&class],[],[],[]]
@@ -224,8 +264,6 @@ if __name__ == '__main__':
 
     
     if cfg.bagging:
-        paths, labels, _ =  get_lists(cfg.root)
-        test_dict = {'paths':paths['test'], 'labels':labels['test']}
 
         for idx in range(5):
             print('bagging iter {}'.format(idx))
@@ -235,10 +273,13 @@ if __name__ == '__main__':
             scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
             dataloaders_dict, cls2id = get_debug_loader(cfg.root, idx)
             train(net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
-            test(net, test_dict, idx)
+            test(net, idx)
+            if cfg.tta:
+                test(net, idx, cfg.tta)
             del net
             
-        concat_res(test_dict)
+        concat_res()
+        concat_res(tta=False)
 
     else:
         net = init_net(cfg)
@@ -247,5 +288,12 @@ if __name__ == '__main__':
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
         dataloaders_dict, cls2id = get_debug_loader(cfg.root)
         train(net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
+        test(net, 'full', cfg.tta)
+        del net, dataloaders_dict, cls2id
+        # 训练一个helper_net
+        helper_net = init_net(cfg)
+        dataloaders_dict, cls2id = get_debug_loader(cfg.root,opt=True)
+        train(helper_net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
+        test(net, 'help', cfg.tta, opt=True)
     
     
