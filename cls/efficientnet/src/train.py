@@ -44,9 +44,10 @@ def confusion_matrix(a,idx=-1,tta=False):
 
 
 def test(net, idx, tta=False, opt=False):
-    paths, labels, _ =  get_lists(cfg.root,opt)
+    print(opt)
+    paths, labels, _ =  get_lists(cfg.root,opt=opt)
     test_dict = {'paths':paths['test'], 'labels':labels['test']}
-    
+    print(len(paths['test']))
     test_path = test_dict['paths']
     test_label = test_dict['labels']
     
@@ -289,11 +290,15 @@ if __name__ == '__main__':
         dataloaders_dict, cls2id = get_debug_loader(cfg.root)
         train(net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
         test(net, 'full', cfg.tta)
-        del net, dataloaders_dict, cls2id
-        # 训练一个helper_net
+        del net, dataloaders_dict, cls2id, criterion, optimizer, scheduler
+        训练一个helper_net
         helper_net = init_net(cfg)
+        criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
+        optimizer = Ranger(helper_net.parameters(), lr=cfg.lr) # optim.Adam()
+        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
         dataloaders_dict, cls2id = get_debug_loader(cfg.root,opt=True)
+        cfg.epochs = 30
         train(helper_net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
-        test(net, 'help', cfg.tta, opt=True)
+        test(helper_net, 'help', cfg.tta, opt=True)
     
     
