@@ -25,7 +25,7 @@ from mean_std import calc_mean_std
 from torch.utils.model_zoo import load_url
 
 
-def confusion_matrix(a,idx=-1,tta=False):
+def confusion_matrix(a,name=-1,tta=False):
     # 删除准确率为1的行/列
     row=0
     while row < len(a):
@@ -40,10 +40,10 @@ def confusion_matrix(a,idx=-1,tta=False):
     plt.ylabel('prediction',fontsize=15)
     plt.xlabel('ground-truth',fontsize=15)
     fig = plt.gcf()
-    fig.savefig("tta_conf_matrix_{}.png".format(idx) if tta else "conf_matrix_{}.png".format(idx))
+    fig.savefig("tta_conf_matrix_{}.png".format(name) if tta else "conf_matrix_{}.png".format(name))
 
 
-def test(net, idx, tta=False, opt=False):
+def test(net, name, tta=False, opt=False):
     paths, labels, _ =  get_lists(cfg.root,opt=opt)
     test_dict = {'paths':paths['test'], 'labels':labels['test']}
     test_path = test_dict['paths']
@@ -80,16 +80,18 @@ def test(net, idx, tta=False, opt=False):
         for p, t in zip(res, test_label):
             conf_matrix[p,t] += 1
             
-        confusion_matrix(conf_matrix,idx,tta)
+        confusion_matrix(conf_matrix,name,tta)
         
 
     
     final_res = [[ids[i], res[i]] for i in range(len(ids))]
     df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
-    df.to_csv('tta_id_{}.csv'.format(idx) if tta else 'id_{}.csv'.format(idx),index=None)
+    df.to_csv('tta_id_{}.csv'.format(name) if tta else 'id_{}.csv'.format(name),index=None)
     acc = sum(np.array(res) == np.array(test_label)) / len(res)
-    print('acc {} : {}'.format(idx, acc))
-    print('over!')
+    if tta:
+        print('tta_acc {} : {}'.format(name, acc))
+    else:
+        print('acc {} : {}'.format(name, acc))
    
    
 def init_net(cfg,v=4):
@@ -112,20 +114,21 @@ def concat_res(net_cfg):
         cls = [k for k,v in x.items() if max(x.values())==v][0]
         return cls
         
-    paths, labels, _ =  get_lists(cfg.root, net_cfg['opt'])
+    paths, labels, _ =  get_lists(cfg.root, opt=net_cfg['opt'])
     test_dict = {'paths':paths['test'], 'labels':labels['test']}
     
     paths = [i.split('/')[-1][:-4] for i in test_dict['paths']]
     labels = test_dict['labels']
     
-    res_dict = {'FileID':paths, 'SpeciesID':[[] for i in range(len(paths))]}
+
     
     tta_file_list = ['tta_id_{}.csv'.format(i) for i in range(5)]
     file_list = ['id_{}.csv'.format(i) for i in range(5)]
     acc = []
     
     for ls in [file_list, tta_file_list] if net_cfg['tta'] else [file_list]:
-        for dir in ['id_{}.csv'.format(i) for i in range(5)]:
+        res_dict = {'FileID':paths, 'SpeciesID':[[] for i in range(len(paths))]}
+        for dir in ls:
             df = pd.read_csv(dir)
             for i in range(len(df)):
                 key = df.loc[i,:]['FileID']
@@ -145,12 +148,12 @@ def concat_res(net_cfg):
         final_res = [[res_dict['FileID'][i], res_dict['SpeciesID'][i]] for i in range(len(paths))]
         df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
         df.to_csv('tta_bagging_res.csv' if net_cfg['tta'] else 'bagging_res.csv',index=None)
-        accuacy = sum(np.array(res_dict['SpeciesID']) == np.array(labels)) / len(paths)
-        acc.append(accuacy)
+        accuracy = sum(np.array(res_dict['SpeciesID']) == np.array(labels)) / len(paths)
+        acc.append(accuracy)
         
     print('final bagging acc is ',acc[0])    
     if net_cfg['tta']:
-        print('final tta bagging acc is ',acc)
+        print('final tta bagging acc is ',acc[1])
         
     
 def cat_res(path0, path20):
@@ -170,25 +173,27 @@ def get_acc(path):
     df = pd.read_csv(path)
     acc = sum(np.array(df['SpeciesID']) == np.array(df_test['SpeciesID'])) / len(df)
 
-def baseline(net_cfg):
+def baseline(net_cfg,idx=-1):
     net = init_net(cfg)
     criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
     optimizer = Ranger(net.parameters(), lr=cfg.lr) # optim.Adam()
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
-    dataloaders_dict, cls2id = get_debug_loader(cfg.root, idx, opt=baseline['opt'])
+    dataloaders_dict, cls2id = get_debug_loader(cfg.root, idx, opt=net_cfg['opt'])
     train(net,criterion,optimizer,scheduler,dataloaders_dict,net_cfg)
+    name = idx if net_cfg['bagging'] else net_cfg['name']
     if net_cfg['test']:
-        test(net, idx)
+        test(net, name, False, net_cfg['opt'])
     if net_cfg['tta']:
-        test(net, idx, cfg.tta)
+        test(net, name, net_cfg['tta'], net_cfg['opt'])
     if net_cfg['del']:
         del net,criterion,scheduler,dataloaders_dict,cls2id
 
 def bagging(net_cfg):
     for idx in range(5):
         print('bagging iter {}'.format(idx))
-        baseline(net_cfg)
+        baseline(net_cfg,idx)
     concat_res(net_cfg)
+
 
 
 def train(net, criterion, optimizer, scheduler, dataloaders_dict, net_cfg):
@@ -299,22 +304,24 @@ if __name__ == '__main__':
     helper_net_cfg = {
         'opt':True,
         'tta':True,
-        'epochs':30,
+        'epochs':3,
         'test':True,
         'del':True,
-        'bagging':False,
+        'bagging':True,
         'save':False,
-        'debug':False
+        'debug':False,
+        'name':'help'
     }
-    main_net_cfg{
-        'opt':True,
+    main_net_cfg = {
+        'opt':False,
         'tta':True,
         'epochs':30,
         'test':True,
         'del':True,
         'bagging':False,
         'save':False,
-        'debug':False
+        'debug':False,
+        'name':'full'
     }
     tricky_train(helper_net_cfg)
     
