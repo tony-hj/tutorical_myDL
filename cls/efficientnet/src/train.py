@@ -26,8 +26,9 @@ from torch.utils.model_zoo import load_url
 
 
 def confusion_matrix(a,idx=-1,tta=False):
-    # 删除准确率为1的行/列
-    row=0
+    # 画混淆矩阵
+    
+    row = 0 # 删除准确率为1的行/列
     while row < len(a):
         if a[row,row] == sum(a[row]) and a[row,row] == sum(a[:,row]):
             a = np.delete(a,row,1)
@@ -44,10 +45,9 @@ def confusion_matrix(a,idx=-1,tta=False):
 
 
 def test(net, idx, tta=False, opt=False):
-    print(opt)
+    # 有测试集时对网络进行测试
     paths, labels, _ =  get_lists(cfg.root,opt=opt)
     test_dict = {'paths':paths['test'], 'labels':labels['test']}
-    print(len(paths['test']))
     test_path = test_dict['paths']
     test_label = test_dict['labels']
     
@@ -90,7 +90,7 @@ def test(net, idx, tta=False, opt=False):
     df = pd.DataFrame(final_res, columns=['FileID', 'SpeciesID'])
     df.to_csv('tta_id_{}.csv'.format(idx) if tta else 'id_{}.csv'.format(idx),index=None)
     acc = sum(np.array(res) == np.array(test_label)) / len(res)
-    print('bagging {} : {}'.format(idx, acc))
+    print('acc {} : {}'.format(idx, acc))
     print('over!')
    
    
@@ -108,8 +108,9 @@ def init_net(cfg,v=4):
 
 
 def concat_res(tta=False,opt=False):
-
+    # 通过投票的方式合并bagging的结果文件
     def get_common(res):
+        # 得到众数
         x = dict((a,res.count(a)) for a in res)
         cls = [k for k,v in x.items() if max(x.values())==v][0]
         return cls
@@ -148,6 +149,7 @@ def concat_res(tta=False,opt=False):
         print('final bagging acc is ',acc)
     
 def cat_res(path0, path20):
+    # 两个结果文件的合并
     df0 = pd.read_csv(path0)
     df20 = pd.read_csv(path20)
     index = []
@@ -160,6 +162,7 @@ def cat_res(path0, path20):
     df20.to_csv('final_res.csv')
   
 def get_acc(path):
+    # 有 结果csv文件 和 测试集csv文件 计算准确率
     df_test = pd.read_csv('/content/dataset/test.csv')
     df = pd.read_csv(path)
     acc = sum(np.array(df['SpeciesID']) == np.array(df_test['SpeciesID'])) / len(df)
@@ -283,21 +286,21 @@ if __name__ == '__main__':
         concat_res(tta=False)
 
     else:
-        net = init_net(cfg)
-        criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
-        optimizer = Ranger(net.parameters(), lr=cfg.lr) # optim.Adam()
-        scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
-        dataloaders_dict, cls2id = get_debug_loader(cfg.root)
-        train(net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
-        test(net, 'full', cfg.tta)
-        del net, dataloaders_dict, cls2id, criterion, optimizer, scheduler
-        训练一个helper_net
+        # net = init_net(cfg)
+        # criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
+        # optimizer = Ranger(net.parameters(), lr=cfg.lr) # optim.Adam()
+        # scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
+        # dataloaders_dict, cls2id = get_debug_loader(cfg.root)
+        # train(net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
+        # test(net, 'full', cfg.tta)
+        # del net, dataloaders_dict, cls2id, criterion, optimizer, scheduler
+        # 训练一个helper_net
         helper_net = init_net(cfg)
         criterion = LabelSmoothSoftmaxCE() if cfg.label_smooth else nn.CrossEntropyLoss().to(device)
         optimizer = Ranger(helper_net.parameters(), lr=cfg.lr) # optim.Adam()
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=3, verbose=True) # optim.lr_scheduler.MultiStepLR
         dataloaders_dict, cls2id = get_debug_loader(cfg.root,opt=True)
-        cfg.epochs = 30
+        cfg.epochs = 5
         train(helper_net,criterion,optimizer,scheduler,dataloaders_dict,cfg)
         test(helper_net, 'help', cfg.tta, opt=True)
     
