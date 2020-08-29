@@ -182,8 +182,8 @@ class ResNet(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         
         # 网络的第一层加入注意力机制
-        self.ca = ChannelAttention(self.inplanes)
-        self.sa = SpatialAttention()
+        # self.ca = ChannelAttention(self.inplanes)
+        # self.sa = SpatialAttention()
         
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, layers[0])
@@ -195,8 +195,8 @@ class ResNet(nn.Module):
                                        dilate=replace_stride_with_dilation[2])
         
         # 网络的卷积层的第一层和最后一层加入注意力机制，这样可以使用预训练权重
-        self.ca1 = ChannelAttention(self.inplanes)
-        self.sa1 = SpatialAttention()
+        # self.ca1 = ChannelAttention(self.inplanes)
+        # self.sa1 = SpatialAttention()
         
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
@@ -250,8 +250,8 @@ class ResNet(nn.Module):
         x = self.maxpool(x)
         
         # 注意力机制
-        x = self.ca(x) * x
-        x = self.sa(x) * x
+        # x = self.ca(x) * x
+        # x = self.sa(x) * x
         
         x = self.layer1(x)
         x = self.layer2(x)
@@ -259,8 +259,8 @@ class ResNet(nn.Module):
         x = self.layer4(x)
         
         # 注意力机制
-        x = self.ca1(x) * x
-        x = self.sa1(x) * x
+        # x = self.ca1(x) * x
+        # x = self.sa1(x) * x
         
         x = self.avgpool(x)
         x = torch.flatten(x, 1)

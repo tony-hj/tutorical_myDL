@@ -3,8 +3,8 @@
 Implementation of paradigm described in paper: Designing Network Design Spaces published by Facebook AI Research (FAIR)
 """
 import torch.nn as nn
-from src.modules import Stem, Stage, Head
-from src.config import NUM_CLASSES
+from regnet.modules import Stem, Stage, Head
+from regnet.config import NUM_CLASSES
 from math import sqrt
 
 

@@ -3,12 +3,12 @@
 Implementation of paradigm described in paper: Designing Network Design Spaces published by Facebook AI Research (FAIR)
 """
 import numpy as np
-from src.anynet import AnyNetXe
+from regnet.anynet import AnyNetXe
 
 
 class RegNetX(AnyNetXe):
-    def __init__(self, initial_width, slope, quantized_param, network_depth, bottleneck_ratio, group_width, stride,
-                 se_ratio=None):
+    def __init__(self, initial_width=24, slope=36, quantized_param=2.5, network_depth=1, bottleneck_ratio=1, group_width=8, stride=2,
+                 se_ratio=4):
         # We need to derive block width and number of blocks from initial parameters.
         parameterized_width = initial_width + slope * np.arange(network_depth)  # From equation 2
         parameterized_block = np.log(parameterized_width / initial_width) / np.log(quantized_param)  # From equation 3
