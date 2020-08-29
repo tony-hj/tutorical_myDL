@@ -21,6 +21,7 @@
 - [x] ReduceLROnPlateau
 - [x] cbam模块
 - [x] sample weight
+- [x] 辅助分类器
 
 ### functions
 

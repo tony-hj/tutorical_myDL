@@ -304,7 +304,7 @@ if __name__ == '__main__':
     helper_net_cfg = {
         'opt':True,
         'tta':True,
-        'epochs':3,
+        'epochs':5,
         'test':True,
         'del':True,
         'bagging':True,
