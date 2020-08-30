@@ -1,3 +1,4 @@
+import utils.config as cfg
 from nets.efficientnet_pytorch import EfficientNet, cbam_EfficientNet
 from nets.resnet import resnet50, resnext50_32x4d, resnext101_32x8d, wide_resnet50_2, wide_resnet101_2
 
