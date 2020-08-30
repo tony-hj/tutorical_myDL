@@ -5,7 +5,6 @@ import torchvision
 from torch import nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
-from efficientnet_pytorch import EfficientNet, cbam_EfficientNet
 
 from utils.label_smooth import LabelSmoothSoftmaxCE
 import utils.config as cfg
@@ -82,7 +81,8 @@ def get_res(net, name, tta=False, opt=False):
     return csvfile
    
 def get_acc(path):
-    df_test = pd.read_csv('/content/dataset/test.csv')
+    # 不能在opt的时候算准确率
+    df_test = pd.read_csv('/content/dataset/annotation.csv')
     df = pd.read_csv(path)
     acc = sum(np.array(df['SpeciesID']) == np.array(df_test['SpeciesID'])) / len(df)
     print('{} acc is'.format(path),acc)
@@ -183,7 +183,7 @@ def bagging(net_cfg):
     res_files = concat_res(net_cfg)
     if net_cfg['get_acc']:
         for file in res_files:
-            get_acc(each)
+            get_acc(file)
             
 def bagging2(net_cfg):
     net, criterion, optimizer, scheduler = baseline(net_cfg,early=True)
@@ -287,6 +287,8 @@ def train(net, criterion, optimizer, scheduler, dataloaders_dict, net_cfg):
 def tricky_train(net_cfg):
     if net_cfg['bagging']:
         bagging(net_cfg)
+    elif net_cfg['bagging2']:
+        bagging2(net_cfg)
     else:
         baseline(net_cfg)
 
@@ -313,25 +315,27 @@ if __name__ == '__main__':
         'get_acc':False, # 模拟比赛提交
         'del':True,
         'bagging':True,
+        'bagging2':False,
         'save':False,
         'debug':False,
         'name':'help',
         'model':'efficientnet-b4',
-        'pre_model':''
+        'pre_model':None
     }
     main_net_cfg = {
-        'opt':False,
+        'opt':False,# 不能在opt的时候算准确率，在考虑移除opt中
         'tta':True,
-        'epochs':30,
+        'epochs':1,
         'get_res':True,
-        'get_acc':False, # 模拟比赛提交
+        'get_acc':True, # 模拟比赛提交
         'del':True,
         'bagging':False,
+        'bagging2':True,
         'save':False,
         'debug':False,
         'name':'full',
         'model':'efficientnet-b4',
-        'pre_model':''
+        'pre_model':None
     }
     tricky_train(main_net_cfg)
     
